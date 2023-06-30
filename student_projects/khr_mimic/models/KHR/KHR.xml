@@ -2,8 +2,8 @@
   <!-- 
    This file is automatically created from ("KHR") model by eus2mjcf.l.
    -->
-  <compiler angle="radian" convexhull="false"/>
-  <option timestep="0.001" iterations="50" tolerance="1.000000e-10" solver="Newton" jacobian="dense" cone="pyramidal"/>
+  <compiler angle="radian" convexhull="true"/>
+  <option timestep="0.002" iterations="50" tolerance="1.000000e-10" solver="Newton" jacobian="dense" cone="pyramidal"/>
   <default>
     <geom condim="3" solref="0.02 1.0"/>
     <joint frictionloss="0.2" armature="0.011"/>

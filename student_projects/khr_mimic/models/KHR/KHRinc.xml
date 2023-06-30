@@ -121,23 +121,23 @@
   </worldbody>
   <actuator>
     <!-- motor control -->
-    <motor name="head_joint0" joint="head_joint0"/>
-    <motor name="larm_joint0" joint="larm_joint0"/>
-    <motor name="larm_joint1" joint="larm_joint1"/>
-    <motor name="larm_joint2" joint="larm_joint2"/>
-    <motor name="rarm_joint0" joint="rarm_joint0"/>
-    <motor name="rarm_joint1" joint="rarm_joint1"/>
-    <motor name="rarm_joint2" joint="rarm_joint2"/>
-    <motor name="lleg_joint0" joint="lleg_joint0"/>
-    <motor name="lleg_joint1" joint="lleg_joint1"/>
-    <motor name="lleg_joint2" joint="lleg_joint2"/>
-    <motor name="lleg_joint3" joint="lleg_joint3"/>
-    <motor name="lleg_joint4" joint="lleg_joint4"/>
     <motor name="rleg_joint0" joint="rleg_joint0"/>
     <motor name="rleg_joint1" joint="rleg_joint1"/>
     <motor name="rleg_joint2" joint="rleg_joint2"/>
     <motor name="rleg_joint3" joint="rleg_joint3"/>
     <motor name="rleg_joint4" joint="rleg_joint4"/>
+    <motor name="lleg_joint0" joint="lleg_joint0"/>
+    <motor name="lleg_joint1" joint="lleg_joint1"/>
+    <motor name="lleg_joint2" joint="lleg_joint2"/>
+    <motor name="lleg_joint3" joint="lleg_joint3"/>
+    <motor name="lleg_joint4" joint="lleg_joint4"/>
+    <motor name="rarm_joint0" joint="rarm_joint0"/>
+    <motor name="rarm_joint1" joint="rarm_joint1"/>
+    <motor name="rarm_joint2" joint="rarm_joint2"/>
+    <motor name="larm_joint0" joint="larm_joint0"/>
+    <motor name="larm_joint1" joint="larm_joint1"/>
+    <motor name="larm_joint2" joint="larm_joint2"/>
+    <motor name="head_joint0" joint="head_joint0"/>
 
     <!-- position control -->
   <!--   <position name="head_joint0" kp="10" joint="head_joint0" ctrlrange="-3.14159 3.14159"/> -->

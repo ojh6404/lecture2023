@@ -12,7 +12,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.is_params_set = False
         self.test = test
         self.max_step = max_step # 20000000
-        frame_skip = 10 # for 100 Hz control
+        frame_skip = 10 # for 50 Hz control
 
         # TODO
         self.time = 0
@@ -258,7 +258,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         """
         torque = np.clip(action * self.torque_max, -self.torque_max, self.torque_max)
-        torque[-1] = 0.0 # head joint is not used
+        # torque[-1] = 0.0 # head joint is not used
         self.do_simulation(torque, self.frame_skip)
 
         # next state without noise to calculate reward
@@ -359,6 +359,8 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             done = False
         else:
             done = not notdone
+        if self.sim.data.qpos[2] < 0.18:
+            done |= True
 
         self.current_qpos = (
             self.sim.data.qpos.flat[3:]

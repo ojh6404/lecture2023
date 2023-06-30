@@ -90,7 +90,8 @@ def main():
     )
 
     # slower for motion debugging
-    sim.model.opt.timestep = 0.01
+    # sim.model.opt.timestep = 0.01
+    sim.model.opt.timestep = frame_duration
 
     np.savez(
         "processed_07_08.npz",

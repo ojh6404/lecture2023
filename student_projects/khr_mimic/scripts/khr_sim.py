@@ -8,11 +8,11 @@ from gym.envs.mujoco.mujoco_env import MujocoEnv
 
 
 class KHRMimicEnv(MujocoEnv, utils.EzPickle):
-    def __init__(self, test=False, max_step=None):
+    def __init__(self, test=False, max_step=20000000):
         self.is_params_set = False
         self.test = test
-        self.max_step = max_step
-        frame_skip = 5
+        self.max_step = max_step # 20000000
+        frame_skip = 10 # for 100 Hz control
 
         # TODO
         self.time = 0
@@ -52,6 +52,32 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.lleg_link4_geom_id = self.model.geom_name2id("lleg_link4_mesh")
         self.rleg_link4_geom_id = self.model.geom_name2id("rleg_link4_mesh")
         self.head_geom_id = self.model.geom_name2id("head_link0_mesh")
+
+        self.terminal_contact_geom_ids = [self.model.geom_name2id(geom_names) for geom_names in self.model.geom_names if geom_names not in ["floor", "lleg_link4_mesh", "rleg_link4_mesh"]]
+
+        # geom_ids = [self.model.geom_name2id(geom_names) for geom_names in self.model.geom_names]
+        # for i in geom_ids:
+        #     print(i, self.model.geom_id2name(i))
+
+        # 0 floor
+        # 1 body_link_mesh
+        # 2 rleg_link0_mesh
+        # 3 rleg_link1_mesh
+        # 4 rleg_link2_mesh
+        # 5 rleg_link3_mesh
+        # 6 rleg_link4_mesh
+        # 7 lleg_link0_mesh
+        # 8 lleg_link1_mesh
+        # 9 lleg_link2_mesh
+        # 10 lleg_link3_mesh
+        # 11 lleg_link4_mesh
+        # 12 rarm_link0_mesh
+        # 13 rarm_link1_mesh
+        # 14 rarm_link2_mesh
+        # 15 larm_link0_mesh
+        # 16 larm_link1_mesh
+        # 17 larm_link2_mesh
+        # 18 head_link0_mesh
 
         # get sensor id
         # self.touch_sensor_id = self.model.sensor_name2id("contact_sensor")
@@ -114,10 +140,10 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         print("action space: {}".format(self.action_space.shape))
 
-    def floor_contact_check(self, *args):
+    def floor_contact_check(self, geom_id):
         if any(
             [
-                self.sim.data.contact[nc].geom2 in args
+                self.sim.data.contact[nc].geom2 == geom_id
                 for nc in range(self.sim.data.ncon)
                 if self.model.geom_bodyid[self.sim.data.contact[nc].geom1]
                 == self.floor_geom_id
@@ -143,15 +169,19 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         self.time += self.dt
 
-        print("\n\n\n")
-        print("time: {}".format(self.time))
 
         # check contact
         self.l_foot_contact = self.floor_contact_check(self.lleg_link4_geom_id)
         self.r_foot_contact = self.floor_contact_check(self.rleg_link4_geom_id)
 
-        print("l_foot_contact: {}".format(self.l_foot_contact))
-        print("r_foot_contact: {}".format(self.r_foot_contact))
+        # self.terminal_contact = self.floor_contact_check(self.terminal_contact_geom_ids)
+        self.terminal_contact = False
+        for geom_id in self.terminal_contact_geom_ids:
+            self.terminal_contact |= self.floor_contact_check(geom_id)
+            break
+
+        # mujoco_py function that gets all geom ids
+
 
         if self.current_qpos is None:
             self.current_qpos = self.sim.data.qpos.flat[3:]
@@ -184,6 +214,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
                 copy.deepcopy(self.current_bvel) for i in range(self.n_prev)
             ]
 
+
         pose = self.prev_qpos[-1][4:]  # joint angle (3)
         vel = self.prev_qvel[-1][3:]  # joint velocity (3)
         # jacobian = ramiel_utils.pose2jacobian(pose[0], pose[1], pose[2])
@@ -213,14 +244,22 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         # np.set_printoptions(precision=3)
         # np.set_printoptions(suppress=True)
 
+
         # do simulation
-        # 0 : head_joint0, 1 : larm_joint0, 2 : larm_joint1 3 : larm_joint2
-        # 4 : rarm_joint0, 5 : rarm_joint1, 6 : rarm_joint2
-        # 7 : lleg_joint0, 8 : lleg_joint1, 9 : lleg_joint2, 10 : lleg_joint3, 11 : lleg_joint4
-        # 12 : rleg_joint0, 13 : rleg_joint1, 14 : rleg_joint2, 15 : rleg_joint3, 16 : rleg_joint4
-        torque = np.zeros(17, dtype=np.float32)
+        """
+        qpos
+        0 : base_x, 1 : base_y, 2 : base_z
+        3 : base_quat_w, 4 : base_quat_x, 5 : base_quat_y, 6 : base_quat_z
+        7 : rleg_joint0, 8 : rleg_joint1, 9 : rleg_joint2, 10 : rleg_joint3, 11 : rleg_joint4
+        12 : lleg_joint0, 13 : lleg_joint1, 14 : lleg_joint2, 15 : lleg_joint3, 16 : lleg_joint4
+        17 : rarm_joint0, 18 : rarm_joint1, 19 : rarm_joint2
+        20 : larm_joint0, 21 : larm_joint1, 22 : larm_joint2
+        23 : head_joint0
+
+        """
+        torque = np.clip(action * self.torque_max, -self.torque_max, self.torque_max)
+        torque[-1] = 0.0 # head joint is not used
         self.do_simulation(torque, self.frame_skip)
-        # print([self.sim.data.sensordata[self.model.sensor_adr[self.model.sensor_name2id(name)]] for name in ["dA_top", "dB_top", "dC_top", "dA_bottom", "dB_bottom", "dC_bottom"]])
 
         # next state without noise to calculate reward
         jnt_pos = self.sim.data.qpos[self.jnt_pos_indices]  # joint angle
@@ -314,7 +353,8 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.step_cnt += 1
         # notdone = ramiel_utils.check_range(pose[0], pose[1], pose[2])
         # notdone &= ramiel_utils.horizontal_eval(pole_quat) > 0.5
-        notdone = self.episode_cnt < self.max_episode
+        notdone = not self.terminal_contact
+        notdone &= self.episode_cnt < self.max_episode
         if self.step_cnt == 1:
             done = False
         else:
@@ -352,7 +392,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             self.prev_qpos = None
             self.prev_qvel = None
             self.prev_bvel = None
-            self.const_ext_qpos = self.const_qpos_rand * step_rate * np.random.randn(7)
+            self.const_ext_qpos = self.const_qpos_rand * step_rate * np.random.randn(21)
             self.const_ext_force = (
                 self.const_force_rand * step_rate * np.random.randn(3)
             )
@@ -362,6 +402,8 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             self.const_ext_action = (
                 self.const_action_rand * step_rate * np.random.randn(3)
             )
+
+
         return (
             obs,
             reward,
@@ -441,8 +483,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         elif self.test:
             step_rate = self.default_step_rate
 
-        qpos = self.init_qpos
-        print("qpos", qpos.shape)
+        qpos = self.init_qpos # base_pos [3], base_quat [4], jnt_pos [17]
         qpos[2] = 0.3  # TODO
         qpos[slide_qpos_id] = 0.874
         qpos[roll_qpos_id] = 0.03 * step_rate * np.random.randn(1)
@@ -452,31 +493,31 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         qvel[:] = 0.0
         self.set_state(qpos, qvel)
 
-        if (self.prev_qpos is None) and (self.prev_action is None):
-            self.current_qpos = self.sim.data.qpos.flat[3:]
-            self.current_qvel = self.sim.data.qvel.flat[3:]
-            self.current_bvel = self.sim.data.qvel.flat[:3]
-            self.prev_action = [np.zeros(3) for i in range(self.n_prev)]
-            self.prev_qpos = [
-                self.current_qpos + self.qpos_rand * step_rate * np.random.randn(7)
-                for i in range(self.n_prev)
-            ]
-            self.prev_qvel = [
-                self.current_qvel
-                + self.qvel_rand
-                * step_rate
-                * np.abs(self.sim.data.qvel.flat[3:])
-                * np.random.randn(6)
-                for i in range(self.n_prev)
-            ]
-            self.prev_bvel = [
-                self.current_bvel
-                + self.bvel_rand
-                * step_rate
-                * np.abs(self.sim.data.qvel.flat[:3])
-                * np.random.randn(3)
-                for i in range(self.n_prev)
-            ]
+        # if (self.prev_qpos is None) and (self.prev_action is None):
+        #     self.current_qpos = self.sim.data.qpos.flat[3:]
+        #     self.current_qvel = self.sim.data.qvel.flat[3:]
+        #     self.current_bvel = self.sim.data.qvel.flat[:3]
+        #     self.prev_action = [np.zeros(3) for i in range(self.n_prev)]
+        #     self.prev_qpos = [
+        #         self.current_qpos + self.qpos_rand * step_rate * np.random.randn(21)
+        #         for i in range(self.n_prev)
+        #     ]
+        #     self.prev_qvel = [
+        #         self.current_qvel
+        #         + self.qvel_rand
+        #         * step_rate
+        #         * np.abs(self.sim.data.qvel.flat[3:])
+        #         * np.random.randn(6)
+        #         for i in range(self.n_prev)
+        #     ]
+        #     self.prev_bvel = [
+        #         self.current_bvel
+        #         + self.bvel_rand
+        #         * step_rate
+        #         * np.abs(self.sim.data.qvel.flat[:3])
+        #         * np.random.randn(3)
+        #         for i in range(self.n_prev)
+        #     ]
 
         return self._get_obs()
 
@@ -488,6 +529,10 @@ if __name__ == "__main__":
     env = KHRMimicEnv(test=True)
     env.reset()
 
-    for i in range(1000):
-        env.step(np.zeros(17))
+    for i in range(10000):
+        # env.step(np.zeros(17))
+        test_action = np.random.uniform(-1.0, 1.0, 17)
+        obs, reward, done, info = env.step(test_action)
+        if done:
+            env.reset()
         env.render()

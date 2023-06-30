@@ -16,12 +16,14 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         # TODO
         self.time = 0
-        self.init_motion_data_step = 0
+        self.init_motion_data_frame = 0
         self.load_motion_data()
 
         model_path = "/home/oh/ros/lecture_ws/src/agent-system/lecture2023/student_projects/khr_mimic/models/KHR/KHR.xml"
         MujocoEnv.__init__(self, model_path, frame_skip=frame_skip)
         utils.EzPickle.__init__(self)
+
+        print("sim dt", self.dt)
 
     def load_motion_data(self):
         motion_data = np.load(
@@ -34,7 +36,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.frame_duration = motion_data["frame_duration"]
         self.num_frames = motion_data["num_frames"]
 
-        self.motion_cycle_frames = 120  # TODO
+        self.motion_cycle_frames = 150  # TODO
         self.motion_cycle_period = self.motion_cycle_frames * self.frame_duration
 
     def set_param(self):
@@ -45,8 +47,11 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.n_joints = len(self.jnt_pos_indices)
 
         # get geom id
-        self.lleg_geom_id = self.model.geom_name2id("lleg_link4_mesh")
-        self.rleg_geom_id = self.model.geom_name2id("rleg_link4_mesh")
+
+        self.floor_geom_id = self.model.geom_name2id("floor")
+        self.lleg_link4_geom_id = self.model.geom_name2id("lleg_link4_mesh")
+        self.rleg_link4_geom_id = self.model.geom_name2id("rleg_link4_mesh")
+        self.head_geom_id = self.model.geom_name2id("head_link0_mesh")
 
         # get sensor id
         # self.touch_sensor_id = self.model.sensor_name2id("contact_sensor")
@@ -58,7 +63,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         self.torque_max = 2.5  # [Nm]
         self.kp = 10.0
-        self.kd = 0.5
+        self.kd = 0.03
         self.ctrl_min = np.ones(self.n_joints, dtype=np.float32) * -self.torque_max
         self.ctrl_max = np.ones(self.n_joints, dtype=np.float32) * self.torque_max
 
@@ -109,17 +114,44 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         print("action space: {}".format(self.action_space.shape))
 
-    def step(self, action):  # action : joint torque (17)
-        self.time += self.dt
+    def floor_contact_check(self, *args):
+        if any(
+            [
+                self.sim.data.contact[nc].geom2 in args
+                for nc in range(self.sim.data.ncon)
+                if self.model.geom_bodyid[self.sim.data.contact[nc].geom1]
+                == self.floor_geom_id
+            ]
+        ):
+            return True
+        else:
+            return False
 
+    def step(self, action):  # action : joint torque (17)
         if not self.is_params_set:
             self.set_param()
             self.is_params_set = True
+
+        # TODO
+        current_frame = 0
+        next_frame = current_frame + 1
 
         if self.max_step:
             step_rate = float(self.step_cnt) / self.max_step
         elif self.test:
             step_rate = self.default_step_rate
+
+        self.time += self.dt
+
+        print("\n\n\n")
+        print("time: {}".format(self.time))
+
+        # check contact
+        self.l_foot_contact = self.floor_contact_check(self.lleg_link4_geom_id)
+        self.r_foot_contact = self.floor_contact_check(self.rleg_link4_geom_id)
+
+        print("l_foot_contact: {}".format(self.l_foot_contact))
+        print("r_foot_contact: {}".format(self.r_foot_contact))
 
         if self.current_qpos is None:
             self.current_qpos = self.sim.data.qpos.flat[3:]
@@ -354,7 +386,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         phase = np.array(
             (
-                self.init_motion_data_step
+                self.init_motion_data_frame
                 + self.time % self.motion_cycle_period / self.frame_duration
             )
             % self.motion_cycle_frames
@@ -368,12 +400,12 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         qvel = self.sim.data.qvel.flatten()
         phase = phase[np.newaxis]
 
-        print("base_quat", base_quat.shape)
-        print("jnt_pos", jnt_pos.shape)
-        print("qvel", qvel.shape)
-        print("base_pos_z", base_pos_z)
-        print("phase", phase)
-        print("time", self.time)
+        # print("base_quat", base_quat.shape)
+        # print("jnt_pos", jnt_pos.shape)
+        # print("qvel", qvel.shape)
+        # print("base_pos_z", base_pos_z)
+        # print("phase", phase)
+        # print("time", self.time)
 
         return np.concatenate([base_quat, jnt_pos, qvel, base_pos_z, phase])
 
@@ -396,16 +428,13 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
     def reset_model(self):
         self.time = 0.0
-        self.init_motion_data_step = np.random.randint(
+        self.init_motion_data_frame = np.random.randint(
             low=0, high=self.motion_cycle_frames
         )  # 11
 
         slide_qpos_id = self.model.jnt_qposadr[self.model.joint_name2id("rleg_joint0")]
         roll_qpos_id = self.model.jnt_qposadr[self.model.joint_name2id("rleg_joint2")]
         pitch_qpos_id = self.model.jnt_qposadr[self.model.joint_name2id("rleg_joint1")]
-
-        print("head joint id")
-        print(self.model.joint_name2id("head_joint0"))
 
         if self.max_step:
             step_rate = float(self.step_cnt) / self.max_step
@@ -414,7 +443,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         qpos = self.init_qpos
         print("qpos", qpos.shape)
-        qpos[2] = 0.3
+        qpos[2] = 0.3  # TODO
         qpos[slide_qpos_id] = 0.874
         qpos[roll_qpos_id] = 0.03 * step_rate * np.random.randn(1)
         qpos[pitch_qpos_id] = 0.03 * step_rate * np.random.randn(1)

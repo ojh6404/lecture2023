@@ -373,6 +373,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         print("qvel", qvel.shape)
         print("base_pos_z", base_pos_z)
         print("phase", phase)
+        print("time", self.time)
 
         return np.concatenate([base_quat, jnt_pos, qvel, base_pos_z, phase])
 
@@ -399,18 +400,12 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             low=0, high=self.motion_cycle_frames
         )  # 11
 
-        slide_qpos_id = self.model.jnt_qposadr[
-            self.model.joint_name2id("KHR/rleg_joint0")
-        ]
-        roll_qpos_id = self.model.jnt_qposadr[
-            self.model.joint_name2id("KHR/rleg_joint2")
-        ]
-        pitch_qpos_id = self.model.jnt_qposadr[
-            self.model.joint_name2id("KHR/rleg_joint1")
-        ]
+        slide_qpos_id = self.model.jnt_qposadr[self.model.joint_name2id("rleg_joint0")]
+        roll_qpos_id = self.model.jnt_qposadr[self.model.joint_name2id("rleg_joint2")]
+        pitch_qpos_id = self.model.jnt_qposadr[self.model.joint_name2id("rleg_joint1")]
 
         print("head joint id")
-        print(self.model.joint_name2id("KHR/head_joint0"))
+        print(self.model.joint_name2id("head_joint0"))
 
         if self.max_step:
             step_rate = float(self.step_cnt) / self.max_step

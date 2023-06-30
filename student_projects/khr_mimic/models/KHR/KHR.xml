@@ -16,5 +16,5 @@
     <texture name="texplane" type="2d" builtin="checker" rgb1=".4 .6 .8" rgb2=".2 0.3 0.4" width="512" height="512" mark="cross" markrgb=".8 .8 .8"/>
     <material name="matplane" reflectance="0.3" texture="texplane" texrepeat="1 1" texuniform="true"/>
   </asset>
-  <include file="KHR/KHRinc.xml"/>
+  <include file="KHRinc.xml"/>
 </mujoco>

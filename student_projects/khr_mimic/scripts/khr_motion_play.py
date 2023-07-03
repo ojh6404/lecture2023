@@ -3,8 +3,7 @@ import copy
 import numpy as np
 from gym import utils, spaces
 from gym.envs.mujoco.mujoco_env import MujocoEnv
-
-# import ramiel_utils
+from utils import *
 
 
 class KHRMimicEnv(MujocoEnv, utils.EzPickle):
@@ -27,13 +26,25 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
     def load_motion_data(self):
         motion_data = np.load(
-            "/home/oh/ros/lecture_ws/src/agent-system/lecture2023/student_projects/khr_mimic/data/processed_07_08.npz",
+            "/home/oh/ros/lecture_ws/src/agent-system/lecture2023/student_projects/khr_mimic/data/blended_processed_07_08.npz",
             allow_pickle=True,
         )
-        self.motion_cycle_frames = 150  # TODO
-        self.ref_base_pos = motion_data["ref_base_pos"][: self.motion_cycle_frames]
-        self.ref_base_quat = motion_data["ref_base_quat"][: self.motion_cycle_frames]
-        self.ref_jnt_pos = motion_data["ref_jnt_pos"][: self.motion_cycle_frames]
+        self.motion_cycle_frames = int(
+            150 * (1 / 120.0 / 0.02)  # 62
+        )  # NOTE cuz 150 is cycle in original
+        print("motion_cycle_frames", self.motion_cycle_frames)
+
+        self.ref_base_pos = motion_data["ref_base_pos"][0 : self.motion_cycle_frames]
+        self.ref_base_quat = motion_data["ref_base_quat"][0 : self.motion_cycle_frames]
+        self.ref_jnt_pos = motion_data["ref_jnt_pos"][0 : self.motion_cycle_frames]
+        self.ref_jnt_vel = motion_data["ref_jnt_vel"][0 : self.motion_cycle_frames]
+        self.ref_base_lin_vel = motion_data["ref_base_lin_vel"][
+            0 : self.motion_cycle_frames
+        ]
+        self.ref_base_ang_vel = motion_data["ref_base_ang_vel"][
+            0 : self.motion_cycle_frames
+        ]
+        self.ref_ee_pos = motion_data["ref_ee_pos"][0 : self.motion_cycle_frames]
         self.frame_duration = motion_data["frame_duration"]
         self.num_frames = motion_data["num_frames"]
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+
 import copy
 import numpy as np
 from gym import utils, spaces
 from gym.envs.mujoco.mujoco_env import MujocoEnv
 from mujoco_py.generated import const
+from utils import *
 
 """
 qpos
@@ -40,20 +42,30 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
     def load_motion_data(self):
         motion_data = np.load(
-            "/home/oh/ros/lecture_ws/src/agent-system/lecture2023/student_projects/khr_mimic/data/processed_07_08.npz",
+            "/home/oh/ros/lecture_ws/src/agent-system/lecture2023/student_projects/khr_mimic/data/blended_processed_07_08.npz",
             allow_pickle=True,
         )
-        self.ref_base_pos = motion_data["ref_base_pos"]
-        self.ref_base_quat = motion_data["ref_base_quat"]
-        self.ref_jnt_pos = motion_data["ref_jnt_pos"]
-        self.ref_base_lin_vel = motion_data["ref_base_lin_vel"]
-        self.ref_base_ang_vel = motion_data["ref_base_ang_vel"]
-        self.ref_jnt_vel = motion_data["ref_jnt_vel"]
-        self.ref_ee_pos = motion_data["ref_ee_pos"].item()
+        """
+        motion data order
+        RLEG LLEG RARM LARM
+        """
+        # NOTE original cycle frames : 150, 120 Hz -> adjust to 50 HZ
+        self.motion_cycle_frames = int(150 * (1.0 / 120.0 / 0.02))  # 62
+
+        self.ref_base_pos = motion_data["ref_base_pos"][0 : self.motion_cycle_frames]
+        self.ref_base_quat = motion_data["ref_base_quat"][0 : self.motion_cycle_frames]
+        self.ref_jnt_pos = motion_data["ref_jnt_pos"][0 : self.motion_cycle_frames]
+        self.ref_jnt_vel = motion_data["ref_jnt_vel"][0 : self.motion_cycle_frames]
+        self.ref_base_lin_vel = motion_data["ref_base_lin_vel"][
+            0 : self.motion_cycle_frames
+        ]
+        self.ref_base_ang_vel = motion_data["ref_base_ang_vel"][
+            0 : self.motion_cycle_frames
+        ]
+        self.ref_ee_pos = motion_data["ref_ee_pos"][0 : self.motion_cycle_frames]
         self.frame_duration = motion_data["frame_duration"]
         self.num_frames = motion_data["num_frames"]
 
-        self.motion_cycle_frames = 150  # TODO
         self.motion_cycle_period = self.motion_cycle_frames * self.frame_duration
 
     def set_param(self):
@@ -91,9 +103,12 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.buffer_size = 6
 
         # variable for rl
-        self.max_episode = 10000
+        self.max_episode = 10000  # 200 [s]
         self.episode_cnt = 0  # local
         self.step_cnt = 0  # global
+        self.time_step = 0
+
+        self.init_motion_time_step = 0
 
     def set_buffer(self):
         action = self.action
@@ -153,7 +168,8 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
     def compute_interpolated_motion(self, time):
         # TODO
-        return 0
+        interpolated_motion = np.zeros(self.n_control_joints, dtype=np.float32)
+        return interpolated_motion
 
     def step(self, action):  # action : joint torque (17)
         self.action = action[:-1]  # without head joint
@@ -165,6 +181,10 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         # TODO
         current_frame = 0
         next_frame = current_frame + 1
+
+        local_time_step = self.init_motion_time_step + self.time_step
+        loop_cnt = local_time_step // self.motion_cycle_frames
+        cycle_time_step = local_time_step % self.motion_cycle_frames
 
         self.time += self.dt
 
@@ -181,6 +201,26 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         np.set_printoptions(precision=3)
         np.set_printoptions(suppress=True)
 
+        # TODO compute interpolation
+        target_base_pos = self.ref_base_pos[cycle_time_step] + np.array(
+            [self.ref_base_pos[-1, 0] * loop_cnt, 0.0, 0.0]
+        )
+        target_base_quat = self.ref_base_quat[cycle_time_step]
+        target_jnt_pos = self.ref_jnt_pos[cycle_time_step]
+        target_jnt_vel = self.ref_jnt_vel[cycle_time_step]
+        target_ee_pos = self.ref_ee_pos[cycle_time_step]  # NOTE local
+        target_base_lin_vel = self.ref_base_lin_vel[cycle_time_step]
+        target_base_ang_vel = self.ref_base_ang_vel[cycle_time_step]
+
+        # target_jnt_pos = np.zeros(self.n_control_joints, dtype=np.float32)
+        # target_jnt_vel = np.zeros(self.n_control_joints, dtype=np.float32)
+        # target_ee_pos = np.zeros(3 * 4, dtype=np.float32)
+        # target_base_pos = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # TODO
+        # target_base_quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)  # TODO
+        # target_base_lin_vel = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # TODO
+        # target_base_ang_vel = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # TODO
+
+        # set target
         # do simulation
         # target_jnt_pos = np.clip(action * np.pi, -np.pi, np.pi)
         # target_jnt_pos[-1] = 0.0  # NOTE head joint is not used
@@ -198,37 +238,91 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         ctrl_reward = 0.0  # restraint for joint action (torque)
         contact_reward = 0.0  # restraint for contact between ground and pose/support
         survive_reward = 0.0  # survive reward
-        go_pos_reward = copy.deepcopy(self.sim.data.qpos[0])  # go forward reward
+
+        larm_ee_pos = (
+            self.sim.data.get_geom_xpos("larm_link2_mesh") - self.sim.data.qpos[0:3]
+        )
+        rarm_ee_pos = (
+            self.sim.data.get_geom_xpos("rarm_link2_mesh") - self.sim.data.qpos[0:3]
+        )
+        lleg_ee_pos = (
+            self.sim.data.get_geom_xpos("lleg_link4_mesh") - self.sim.data.qpos[0:3]
+        )
+        rleg_ee_pos = (
+            self.sim.data.get_geom_xpos("rleg_link4_mesh") - self.sim.data.qpos[0:3]
+        )
+        current_ee_pos = np.concatenate(
+            [rleg_ee_pos, lleg_ee_pos, rarm_ee_pos, larm_ee_pos], axis=0
+        )  # NOTE local
 
         # mimic reward
-        mimic_qpos_reward = 0.0
-        mimic_qvel_reward = 0.0
-        mimic_base_reward = 0.0
-        mimic_base_quat_reward = 0.0
-        mimic_base_vel_reward = 0.0
+
+        mimic_jnt_pos_weight = np.ones(self.n_control_joints, dtype=np.float32)
+        mimic_jnt_vel_weight = np.ones(self.n_control_joints, dtype=np.float32)
+        mimic_jnt_pos_reward = 0.65 * np.exp(
+            -2.0
+            * (
+                np.linalg.norm(
+                    mimic_jnt_pos_weight
+                    * (
+                        target_jnt_pos
+                        - self.sim.data.qpos.flat[7 : 7 + self.n_control_joints]
+                    )
+                )
+                ** 2
+            )
+        )
+        mimic_jnt_vel_reward = 0.1 * np.exp(
+            -0.1
+            * (
+                np.linalg.norm(
+                    mimic_jnt_vel_weight
+                    * (
+                        target_jnt_vel
+                        - self.sim.data.qvel.flat[6 : 6 + self.n_control_joints]
+                    )
+                )
+                ** 2
+            )
+        )
+        mimic_ee_reward = 0.15 * np.exp(
+            -40.0 * (np.linalg.norm(target_ee_pos - current_ee_pos) ** 2)
+        )
+        mimic_base_pos_reward = 0.1 * np.exp(
+            -10.0
+            * (np.linalg.norm(self.sim.data.qpos.flat[0:3] - target_base_pos) ** 2)
+        )
+        mimic_base_quat_reward = 0.1 * np.exp(
+            -200 * (1 - np.dot(self.sim.data.qpos.flat[3:7], target_base_quat))
+        )
+        mimic_base_lin_vel_reward = 0.1 * np.exp(
+            -5.0
+            * (np.linalg.norm(self.sim.data.qvel.flat[0:3] - target_base_lin_vel) ** 2)
+        )
 
         mimic_reward = (
-            mimic_qpos_reward
-            + mimic_qvel_reward
-            + mimic_base_reward
+            mimic_jnt_pos_reward
+            + mimic_jnt_vel_reward
+            + mimic_ee_reward
+            + mimic_base_pos_reward
             + mimic_base_quat_reward
-            + mimic_base_vel_reward
+            + mimic_base_lin_vel_reward
         )
 
         reward = (
             survive_reward
             + mimic_reward
-            + go_pos_reward
             # + ctrl_reward
             # + contact_reward
         )
 
         self.episode_cnt += 1
         self.step_cnt += 1
+        self.time_step += 1
 
         # done definition
         done = self.episode_cnt >= self.max_episode  # max episode
-        done |= self.sim.data.qpos[2] < 0.18  # fallen
+        done |= self.sim.data.qpos[2] < 0.15  # fallen
         done |= self.terminal_contact  # contact with ground other than feet
 
         self.set_buffer()
@@ -276,6 +370,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
     def reset_model(self):
         self.time = 0.0
+        self.time_step = 0
         self.init_motion_data_frame = np.random.randint(
             low=0, high=self.motion_cycle_frames
         )

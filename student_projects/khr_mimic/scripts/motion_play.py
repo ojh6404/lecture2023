@@ -1,145 +1,11 @@
 #!/usr/bin/env python3
+
 import numpy as np
 import mujoco_py
 from scipy.ndimage import gaussian_filter1d
-from scipy import stats
 from matplotlib import pyplot as plt
 from mujoco_py.generated import const
-
-
-def quat_pos(x):
-    """
-    make all the real part of the quaternion positive
-    """
-    q = x
-    z = np.float32(q[..., 3:] < 0)  # 1 if negative, 0 if positive
-    q = (1 - 2 * z) * q  # if negative, multiply by -1
-    return q
-
-
-def quat_abs(x):
-    """
-    quaternion norm (unit quaternion represents a 3D rotation, which has norm of 1)
-    """
-    x = np.linalg.norm(x, axis=-1)
-    return x
-
-
-def quat_unit(x):
-    """
-    normalized quaternion with norm of 1
-    """
-    norm = np.expand_dims(quat_abs(x), axis=-1)
-    return x / np.clip(norm, a_min=1e-9, a_max=None)
-
-
-def quat_normalize(q):
-    """
-    Construct 3D rotation from quaternion (the quaternion needs not to be normalized).
-    """
-    q = quat_unit(quat_pos(q))  # normalized to positive and unit quaternion
-    return q
-
-
-def quat_mul(a, b):
-    """
-    quaternion multiplication, x,y,z,w order
-    """
-    x1, y1, z1, w1 = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
-    x2, y2, z2, w2 = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
-
-    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
-    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
-    y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
-    z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
-
-    return np.stack([x, y, z, w], axis=-1)
-
-
-def quat_mul_norm(x, y):
-    """
-    Combine two set of 3D rotations together using \**\* operator. The shape needs to be
-    broadcastable
-    """
-    return quat_normalize(quat_mul(x, y))
-
-
-def quat_identity(shape):
-    """
-    Construct 3D identity rotation given shape
-    """
-    shape = list(shape)
-    w = np.ones(shape + [1])
-    xyz = np.zeros(shape + [3])
-    q = np.concatenate([xyz, w], axis=-1)
-    return q
-
-
-def quat_conjugate(x):
-    """
-    quaternion with its imaginary part negated
-    """
-    return np.concatenate([-x[..., :3], x[..., 3:]], axis=-1)
-
-
-def quat_inverse(x):
-    """
-    The inverse of the rotation
-    """
-    return quat_conjugate(x)
-
-
-def quat_angle_axis(x):
-    """
-    The (angle, axis) representation of the rotation. The axis is normalized to unit length.
-    The angle is guaranteed to be between [0, pi].
-    """
-    s = 2 * (x[..., 3] ** 2) - 1
-    angle = np.arccos(np.clip(s, -1, 1))  # just to be safe
-    axis = x[..., :3]
-    axis /= np.clip(
-        np.linalg.norm(axis, axis=-1, keepdims=True), a_min=1e-9, a_max=None
-    )
-    return angle, axis
-
-
-def compute_linear_velocity(f, dt, level=6, gaussian_filter=True):
-    dfdt = np.zeros_like(f)
-    df = f[1:, :] - f[:-1, :]
-    dfdt[:-1, :] = df / dt
-    dfdt[-1, :] = dfdt[-2, :]
-    if gaussian_filter:
-        dfdt = gaussian_filter1d(dfdt, level, axis=-2, mode="nearest")
-    return dfdt
-
-
-def compute_angular_velocity(r, time_delta, gaussian_filter=True):
-    diff_quat_data = quat_identity(r.shape[:-1])
-    diff_quat_data[:-1] = quat_mul_norm(r[1:, :], quat_inverse(r[:-1, :]))
-
-    diff_quat_data[-1] = diff_quat_data[-2]
-    diff_angle, diff_axis = quat_angle_axis(diff_quat_data)
-    angular_velocity = diff_axis * np.expand_dims(diff_angle, axis=-1) / time_delta
-    if gaussian_filter:
-        angular_velocity = gaussian_filter1d(
-            angular_velocity, 2, axis=-2, mode="nearest"
-        )
-    return angular_velocity
-
-    # diff_quat_data[:-1] =
-
-
-def remove_bias(biased_data, remove_mean=True):
-    x = np.arange(biased_data.shape[0])
-    linear_regression = stats.linregress(x, biased_data)
-    if remove_mean:
-        mean = 0.0
-    else:
-        mean = np.mean(biased_data)
-    result = (
-        biased_data - (linear_regression.slope * x + linear_regression.intercept) + mean
-    )
-    return result
+from utils import *
 
 
 def main():
@@ -277,11 +143,13 @@ def main():
 
     # plt.show()
 
-    ref_ee_pos = dict()
-    ref_ee_pos["larm"] = np.zeros((num_frames, 3), dtype=np.float32)
-    ref_ee_pos["rarm"] = np.zeros((num_frames, 3), dtype=np.float32)
-    ref_ee_pos["lleg"] = np.zeros((num_frames, 3), dtype=np.float32)
-    ref_ee_pos["rleg"] = np.zeros((num_frames, 3), dtype=np.float32)
+    # ref_ee_pos = dict()
+    # ref_ee_pos["larm"] = np.zeros((num_frames, 3), dtype=np.float32)
+    # ref_ee_pos["rarm"] = np.zeros((num_frames, 3), dtype=np.float32)
+    # ref_ee_pos["lleg"] = np.zeros((num_frames, 3), dtype=np.float32)
+    # ref_ee_pos["rleg"] = np.zeros((num_frames, 3), dtype=np.float32)
+
+    ref_ee_pos = np.zeros((num_frames, 12), dtype=np.float32)
 
     try:
         while True:
@@ -307,10 +175,18 @@ def main():
             # print(sim.data.get_body_xpos("lleg_link4"))
 
             # get end effector geom position
-            ref_ee_pos["lleg"][step, :] = sim.data.get_geom_xpos("lleg_link4_mesh")
-            ref_ee_pos["rleg"][step, :] = sim.data.get_geom_xpos("rleg_link4_mesh")
-            ref_ee_pos["larm"][step, :] = sim.data.get_geom_xpos("larm_link2_mesh")
-            ref_ee_pos["rarm"][step, :] = sim.data.get_geom_xpos("rarm_link2_mesh")
+            ref_ee_pos[step, 0:3] = (
+                sim.data.get_geom_xpos("rleg_link4_mesh") - sim.data.qpos[0:3]
+            )
+            ref_ee_pos[step, 3:6] = (
+                sim.data.get_geom_xpos("lleg_link4_mesh") - sim.data.qpos[0:3]
+            )
+            ref_ee_pos[step, 6:9] = (
+                sim.data.get_geom_xpos("rarm_link2_mesh") - sim.data.qpos[0:3]
+            )
+            ref_ee_pos[step, 9:12] = (
+                sim.data.get_geom_xpos("larm_link2_mesh") - sim.data.qpos[0:3]
+            )
 
             size = [0.015] * 3
 
@@ -318,28 +194,28 @@ def main():
             sim.forward()
             sim.step()
             viewer.add_marker(
-                pos=ref_ee_pos["lleg"][step, :],  # Position
+                pos=ref_ee_pos[step, 0:3] + sim.data.qpos[0:3],  # Position
                 label=" ",  # Text beside the marker
                 type=const.GEOM_SPHERE,  # Geomety type
                 size=size,  # Size of the marker
                 rgba=(1, 0, 0, 1),
             )  # RGBA of the marker
             viewer.add_marker(
-                pos=ref_ee_pos["rleg"][step, :],  # Position
+                pos=ref_ee_pos[step, 3:6] + sim.data.qpos[0:3],  # Position
                 label=" ",  # Text beside the marker
                 type=const.GEOM_SPHERE,  # Geomety type
                 size=size,  # Size of the marker
                 rgba=(0, 1, 0, 1),
             )  # RGBA of the marker
             viewer.add_marker(
-                pos=ref_ee_pos["larm"][step, :],  # Position
+                pos=ref_ee_pos[step, 6:9] + sim.data.qpos[0:3],  # Position
                 label=" ",  # Text beside the marker
                 type=const.GEOM_SPHERE,  # Geomety type
                 size=size,  # Size of the marker
                 rgba=(0, 0, 1, 1),
             )  # RGBA of the marker
             viewer.add_marker(
-                pos=ref_ee_pos["rarm"][step, :],  # Position
+                pos=ref_ee_pos[step, 9:12] + sim.data.qpos[0:3],  # Position
                 label=" ",  # Text beside the marker
                 type=const.GEOM_SPHERE,  # Geomety type
                 size=size,  # Size of the marker
@@ -355,13 +231,135 @@ def main():
             ref_base_pos=ref_base_pos,
             ref_base_quat=ref_base_quat,
             ref_jnt_pos=ref_jnt_pos,
+            ref_jnt_vel=ref_jnt_vel,
             ref_base_lin_vel=ref_base_lin_vel,
             ref_base_ang_vel=ref_base_ang_vel,
-            ref_jnt_vel=ref_jnt_vel,
             ref_ee_pos=ref_ee_pos,
             frame_duration=frame_duration,
             num_frames=num_frames,
         )
+
+        total_time = num_frames * frame_duration
+        dt = 0.02
+        blended_num_frames = int(total_time / dt)
+        blended_ref_base_pos = np.zeros((blended_num_frames, 3), dtype=np.float32)
+        blended_ref_base_quat = np.zeros((blended_num_frames, 4), dtype=np.float32)
+        blended_ref_jnt_pos = np.zeros((blended_num_frames, 16), dtype=np.float32)
+        blended_ref_jnt_vel = np.zeros((blended_num_frames, 16), dtype=np.float32)
+        blended_ref_base_lin_vel = np.zeros((blended_num_frames, 3), dtype=np.float32)
+        blended_ref_base_ang_vel = np.zeros((blended_num_frames, 3), dtype=np.float32)
+        blended_ref_ee_pos = np.zeros((blended_num_frames, 12), dtype=np.float32)
+
+        for i in range(blended_num_frames):
+            time = i * dt
+            frame_idx0, frame_idx1, blend = calc_frame_blend(
+                time, total_time, num_frames, frame_duration
+            )
+            blended_ref_base_pos[i, :] = (1 - blend) * ref_base_pos[
+                frame_idx0, :
+            ] + blend * ref_base_pos[frame_idx1, :]
+
+            # blended_ref_base_quat[i, :] = slerp(
+            #     ref_base_quat[frame_idx0, :], ref_base_quat[frame_idx1, :], blend
+            # )
+
+            blended_ref_base_quat[i, :] = quat_normalize(
+                (1 - blend) * ref_base_quat[frame_idx0, [1, 2, 3, 0]]
+                + blend * ref_base_quat[frame_idx1, [1, 2, 3, 0]]
+            )[[3, 0, 1, 2]]
+
+            blended_ref_jnt_pos[i, :] = (1 - blend) * ref_jnt_pos[
+                frame_idx0, :
+            ] + blend * ref_jnt_pos[frame_idx1, :]
+            blended_ref_jnt_vel[i, :] = (1 - blend) * ref_jnt_vel[
+                frame_idx0, :
+            ] + blend * ref_jnt_vel[frame_idx1, :]
+            blended_ref_base_lin_vel[i, :] = (1 - blend) * ref_base_lin_vel[
+                frame_idx0, :
+            ] + blend * ref_base_lin_vel[frame_idx1, :]
+            blended_ref_base_ang_vel[i, :] = (1 - blend) * ref_base_ang_vel[
+                frame_idx0, :
+            ] + blend * ref_base_ang_vel[frame_idx1, :]
+            blended_ref_ee_pos[i, :] = (1 - blend) * ref_ee_pos[
+                frame_idx0, :
+            ] + blend * ref_ee_pos[frame_idx1, :]
+
+        np.savez(
+            "blended_processed_07_08.npz",
+            ref_base_pos=blended_ref_base_pos,
+            ref_base_quat=blended_ref_base_quat,
+            ref_jnt_pos=blended_ref_jnt_pos,
+            ref_jnt_vel=blended_ref_jnt_vel,
+            ref_base_lin_vel=blended_ref_base_lin_vel,
+            ref_base_ang_vel=blended_ref_base_ang_vel,
+            ref_ee_pos=blended_ref_ee_pos,
+            frame_duration=dt,
+            num_frames=blended_num_frames,
+        )
+
+        time_seq = np.arange(0, num_frames) * frame_duration
+        blended_time_seq = np.arange(0, blended_num_frames) * dt
+
+        print("time_seq", time_seq.shape)
+        print("blended_time_seq", blended_time_seq.shape)
+        print("ref_base_pos", ref_base_pos.shape)
+        print("blended_ref_base_pos", blended_ref_base_pos.shape)
+
+        plt.figure()
+        plt.title("ref_base_pos")
+        plt.plot(time_seq, ref_base_lin_vel[:, 0], label="x")
+        plt.plot(time_seq, ref_base_lin_vel[:, 1], label="y")
+        plt.plot(time_seq, ref_base_lin_vel[:, 2], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 0], label="blend_x")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 1], label="blend_y")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 2], label="blend_z")
+        plt.legend()
+
+        plt.figure()
+        plt.title("ref_base_quat")
+        plt.plot(time_seq, ref_base_quat[:, 0], label="w")
+        plt.plot(time_seq, ref_base_quat[:, 1], label="x")
+        plt.plot(time_seq, ref_base_quat[:, 2], label="y")
+        plt.plot(time_seq, ref_base_quat[:, 3], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 0], label="blend_w")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 1], label="blend_x")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 2], label="blend_y")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 3], label="blend_z")
+        plt.legend()
+
+        plt.figure()
+        plt.title("ref_base_ang_vel")
+        plt.plot(time_seq, ref_base_ang_vel[:, 0], label="x")
+        plt.plot(time_seq, ref_base_ang_vel[:, 1], label="y")
+        plt.plot(time_seq, ref_base_ang_vel[:, 2], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 0], label="blend_x")
+        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 1], label="blend_y")
+        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 2], label="blend_z")
+        plt.legend()
+
+        plt.figure()
+        plt.title("ref_jnt_pos")
+        plt.plot(time_seq, ref_jnt_vel[:, 0], label="rleg_0")
+        plt.plot(blended_time_seq, blended_ref_jnt_vel[:, 0], label="blend_rleg_0")
+        # plt.plot(ref_jnt_vel[:, 1], label="rleg_1")
+        # plt.plot(ref_jnt_vel[:, 2], label="rleg_2")
+        # plt.plot(ref_jnt_vel[:, 3], label="rleg_3")
+        # plt.plot(ref_jnt_vel[:, 4], label="rleg_4")
+        # plt.plot(ref_jnt_vel[:, 5], label="lleg_0")
+        # plt.plot(ref_jnt_vel[:, 6], label="lleg_1")
+        # plt.plot(ref_jnt_vel[:, 7], label="lleg_2")
+        # plt.plot(ref_jnt_vel[:, 8], label="lleg_3")
+        # plt.plot(ref_jnt_vel[:, 9], label="lleg_4")
+        # plt.plot(ref_jnt_vel[:, 10], label="rarm_0")
+        # plt.plot(ref_jnt_vel[:, 11], label="rarm_1")
+        # plt.plot(ref_jnt_vel[:, 12], label="rarm_2")
+        # plt.plot(ref_jnt_vel[:, 13], label="larm_0")
+        # plt.plot(ref_jnt_vel[:, 14], label="larm_1")
+        # plt.plot(ref_jnt_vel[:, 15], label="larm_2")
+        # plt.legend()
+
+        plt.show()
+
         print("processed motion saved")
 
 

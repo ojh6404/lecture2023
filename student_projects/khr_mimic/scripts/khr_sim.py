@@ -103,7 +103,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.buffer_size = 6
 
         # variable for rl
-        self.max_episode = 10000  # 200 [s]
+        self.max_episode = 1000  # 20 [s]
         self.episode_cnt = 0  # local
         self.step_cnt = 0  # global
         self.time_step = 0
@@ -178,13 +178,9 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             self.set_buffer()
             self.is_params_set = True
 
-        # TODO
-        current_frame = 0
-        next_frame = current_frame + 1
-
-        local_time_step = self.init_motion_time_step + self.time_step
-        loop_cnt = local_time_step // self.motion_cycle_frames
-        cycle_time_step = local_time_step % self.motion_cycle_frames
+        self.local_time_step = self.init_motion_time_step + self.time_step
+        self.loop_cnt = self.local_time_step // self.motion_cycle_frames
+        self.cycle_time_step = self.local_time_step % self.motion_cycle_frames
 
         self.time += self.dt
 
@@ -202,15 +198,15 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         np.set_printoptions(suppress=True)
 
         # TODO compute interpolation
-        target_base_pos = self.ref_base_pos[cycle_time_step] + np.array(
-            [self.ref_base_pos[-1, 0] * loop_cnt, 0.0, 0.0]
+        target_base_pos = self.ref_base_pos[self.cycle_time_step] + np.array(
+            [self.ref_base_pos[-1, 0] * self.loop_cnt, 0.0, 0.0]
         )
-        target_base_quat = self.ref_base_quat[cycle_time_step]
-        target_jnt_pos = self.ref_jnt_pos[cycle_time_step]
-        target_jnt_vel = self.ref_jnt_vel[cycle_time_step]
-        target_ee_pos = self.ref_ee_pos[cycle_time_step]  # NOTE local
-        target_base_lin_vel = self.ref_base_lin_vel[cycle_time_step]
-        target_base_ang_vel = self.ref_base_ang_vel[cycle_time_step]
+        target_base_quat = self.ref_base_quat[self.cycle_time_step]
+        target_jnt_pos = self.ref_jnt_pos[self.cycle_time_step]
+        target_jnt_vel = self.ref_jnt_vel[self.cycle_time_step]
+        target_ee_pos = self.ref_ee_pos[self.cycle_time_step]  # NOTE local
+        target_base_lin_vel = self.ref_base_lin_vel[self.cycle_time_step]
+        target_base_ang_vel = self.ref_base_ang_vel[self.cycle_time_step]
 
         # target_jnt_pos = np.zeros(self.n_control_joints, dtype=np.float32)
         # target_jnt_vel = np.zeros(self.n_control_joints, dtype=np.float32)
@@ -237,7 +233,6 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         # reward definition
         ctrl_reward = 0.0  # restraint for joint action (torque)
         contact_reward = 0.0  # restraint for contact between ground and pose/support
-        survive_reward = 0.0  # survive reward
 
         larm_ee_pos = (
             self.sim.data.get_geom_xpos("larm_link2_mesh") - self.sim.data.qpos[0:3]
@@ -259,7 +254,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
         mimic_jnt_pos_weight = np.ones(self.n_control_joints, dtype=np.float32)
         mimic_jnt_vel_weight = np.ones(self.n_control_joints, dtype=np.float32)
-        mimic_jnt_pos_reward = 0.65 * np.exp(
+        mimic_jnt_pos_reward = 0.5 * np.exp(
             -2.0
             * (
                 np.linalg.norm(
@@ -271,7 +266,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
                 )
                 ** 2
             )
-        )
+        )  # NOTE hyperparameter from original paper
         mimic_jnt_vel_reward = 0.1 * np.exp(
             -0.1
             * (
@@ -284,46 +279,98 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
                 )
                 ** 2
             )
-        )
-        mimic_ee_reward = 0.15 * np.exp(
+        )  # NOTE hyperparameter from original paper
+        mimic_ee_reward = 0.1 * np.exp(
             -40.0 * (np.linalg.norm(target_ee_pos - current_ee_pos) ** 2)
-        )
-        mimic_base_pos_reward = 0.1 * np.exp(
+        )  # NOTE hyperparameter from original paper
+        mimic_base_pos_reward = 0.2 * np.exp(
             -10.0
             * (np.linalg.norm(self.sim.data.qpos.flat[0:3] - target_base_pos) ** 2)
-        )
+        )  # NOTE hyperparameter from original paper
         mimic_base_quat_reward = 0.1 * np.exp(
-            -200 * (1 - np.dot(self.sim.data.qpos.flat[3:7], target_base_quat))
-        )
+            -20 * (1 - np.dot(self.sim.data.qpos.flat[3:7], target_base_quat))
+        )  # NOTE not from original paper
         mimic_base_lin_vel_reward = 0.1 * np.exp(
-            -5.0
+            # -5.0
+            -20.0
             * (np.linalg.norm(self.sim.data.qvel.flat[0:3] - target_base_lin_vel) ** 2)
-        )
+        )  # NOTE not from original paper
+
+        # print(
+        #     "local time step : {}, loop count : {}, cycle time step : {}".format(
+        #         local_time_step, loop_cnt, cycle_time_step
+        #     )
+        # )
+        # print("target_base_pos : {}".format(target_base_pos))
 
         mimic_reward = (
             mimic_jnt_pos_reward
             + mimic_jnt_vel_reward
             + mimic_ee_reward
             + mimic_base_pos_reward
-            + mimic_base_quat_reward
+            # + mimic_base_quat_reward
             + mimic_base_lin_vel_reward
         )
 
         reward = (
-            survive_reward
-            + mimic_reward
+            mimic_reward
             # + ctrl_reward
             # + contact_reward
         )
+
+        # print(
+        #     "buffer[jnt_pos] : {}".format(
+        #         self.buffer["action"][-1] - self.buffer["action"][-2]
+        #     )
+        # )
+
+        if self.step_cnt % 1000 == 0:
+            print("--------------------------------------")
+            print(
+                "mimic_jnt_pos_reward : {}".format(mimic_jnt_pos_reward / mimic_reward)
+            )
+            print(
+                "mimic_jnt_vel_reward : {}".format(mimic_jnt_vel_reward / mimic_reward)
+            )
+            print("mimic_ee_reward : {}".format(mimic_ee_reward / mimic_reward))
+            print(
+                "mimic_base_pos_reward : {}".format(
+                    mimic_base_pos_reward / mimic_reward
+                )
+            )
+            # print(
+            #     "mimic_base_quat_reward : {}".format(
+            #         mimic_base_quat_reward / mimic_reward
+            #     )
+            # )
+            print(
+                "mimic_base_lin_vel_reward : {}".format(
+                    mimic_base_lin_vel_reward / mimic_reward
+                )
+            )
+            print("--------------------------------------")
 
         self.episode_cnt += 1
         self.step_cnt += 1
         self.time_step += 1
 
+        if (
+            self.loop_cnt > 0
+            and (
+                self.sim.data.qpos[0]
+                - self.ref_base_pos[self.init_motion_data_frame, 0]
+            )
+            < 0.1
+        ):
+            not_forward = True
+        else:
+            not_forward = False
+
         # done definition
         done = self.episode_cnt >= self.max_episode  # max episode
-        done |= self.sim.data.qpos[2] < 0.15  # fallen
+        done |= self.sim.data.qpos[2] < 0.23  # fallen
         done |= self.terminal_contact  # contact with ground other than feet
+        done |= not_forward  # not forward
 
         self.set_buffer()
 
@@ -340,21 +387,23 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             dict(
                 ctrl_reward=ctrl_reward,
                 contact_reward=contact_reward,
-                survive_reward=survive_reward,
             ),
         )
 
     def _get_obs(self):
+        # phase = np.array(
+        #     (
+        #         self.init_motion_data_frame
+        #         + self.time % self.motion_cycle_period / self.frame_duration
+        #     )
+        #     % self.motion_cycle_frames
+        #     / self.motion_cycle_frames,
+        #     dtype=np.float32,
+        # )
+        # phase = phase[np.newaxis]
         phase = np.array(
-            (
-                self.init_motion_data_frame
-                + self.time % self.motion_cycle_period / self.frame_duration
-            )
-            % self.motion_cycle_frames
-            / self.motion_cycle_frames,
-            dtype=np.float32,
+            [self.cycle_time_step / self.motion_cycle_frames], dtype=np.float32
         )
-        phase = phase[np.newaxis]
         return np.concatenate(
             [np.array(obs, dtype=np.float32).flatten() for obs in self.buffer.values()]
             + [phase]

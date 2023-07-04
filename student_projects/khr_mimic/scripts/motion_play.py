@@ -37,6 +37,9 @@ def main():
     ref_lleg_jnt_pos = ref_jnt_pos[:, 6:11]
     ref_rleg_jnt_pos = ref_jnt_pos[:, 11:16]
 
+    # TODO
+    ref_base_pos[:, 0] = 0.8 * ref_base_pos[:, 0]
+
     # RLEG LLEG RARM LARM in mujoco
     ref_jnt_pos = np.hstack(
         [ref_rleg_jnt_pos, ref_lleg_jnt_pos, ref_rarm_jnt_pos, ref_larm_jnt_pos]
@@ -327,6 +330,15 @@ def main():
         plt.plot(blended_time_seq, blended_ref_base_quat[:, 3], label="blend_z")
         plt.legend()
 
+        plt.figure("ref_base_lin_vel")
+        plt.title("ref_base_lin_vel")
+        plt.plot(time_seq, ref_base_lin_vel[:, 0], label="x")
+        plt.plot(time_seq, ref_base_lin_vel[:, 1], label="y")
+        plt.plot(time_seq, ref_base_lin_vel[:, 2], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 0], label="blend_x")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 1], label="blend_y")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 2], label="blend_z")
+
         plt.figure()
         plt.title("ref_base_ang_vel")
         plt.plot(time_seq, ref_base_ang_vel[:, 0], label="x")
@@ -361,6 +373,81 @@ def main():
         plt.show()
 
         print("processed motion saved")
+
+        step = 0
+        while True:
+            state = sim.get_state()
+            motion_qpos = np.zeros(
+                24, dtype=np.float32
+            )  # base_pos (3), base_quat (4), joint_pos (17)
+            motion_qpos[0:3] = blended_ref_base_pos[step, :]  # x, y, z [m]
+            motion_qpos[3:7] = blended_ref_base_quat[step, :]  # w, x, y, z
+            motion_qpos[7:23] = blended_ref_jnt_pos[step, :]  # joint angles [rad]
+            state = mujoco_py.MjSimState(
+                state.time,
+                motion_qpos,
+                state.qvel,
+                state.act,
+                state.udd_state,
+            )
+
+            # code for get end effector position of lleg_link4...
+            # sim.set_state(state)
+            # sim.forward()
+            # sim.step()
+            # print(sim.data.get_body_xpos("lleg_link4"))
+
+            # get end effector geom position
+            blended_ref_ee_pos[step, 0:3] = (
+                sim.data.get_geom_xpos("rleg_link4_mesh") - sim.data.qpos[0:3]
+            )
+            blended_ref_ee_pos[step, 3:6] = (
+                sim.data.get_geom_xpos("lleg_link4_mesh") - sim.data.qpos[0:3]
+            )
+            blended_ref_ee_pos[step, 6:9] = (
+                sim.data.get_geom_xpos("rarm_link2_mesh") - sim.data.qpos[0:3]
+            )
+            blended_ref_ee_pos[step, 9:12] = (
+                sim.data.get_geom_xpos("larm_link2_mesh") - sim.data.qpos[0:3]
+            )
+
+            size = [0.015] * 3
+
+            sim.set_state(state)
+            sim.forward()
+            sim.step()
+            viewer.add_marker(
+                pos=blended_ref_ee_pos[step, 0:3] + sim.data.qpos[0:3],  # Position
+                label=" ",  # Text beside the marker
+                type=const.GEOM_SPHERE,  # Geomety type
+                size=size,  # Size of the marker
+                rgba=(1, 0, 0, 1),
+            )  # RGBA of the marker
+            viewer.add_marker(
+                pos=blended_ref_ee_pos[step, 3:6] + sim.data.qpos[0:3],  # Position
+                label=" ",  # Text beside the marker
+                type=const.GEOM_SPHERE,  # Geomety type
+                size=size,  # Size of the marker
+                rgba=(0, 1, 0, 1),
+            )  # RGBA of the marker
+            viewer.add_marker(
+                pos=blended_ref_ee_pos[step, 6:9] + sim.data.qpos[0:3],  # Position
+                label=" ",  # Text beside the marker
+                type=const.GEOM_SPHERE,  # Geomety type
+                size=size,  # Size of the marker
+                rgba=(0, 0, 1, 1),
+            )  # RGBA of the marker
+            viewer.add_marker(
+                pos=blended_ref_ee_pos[step, 9:12] + sim.data.qpos[0:3],  # Position
+                label=" ",  # Text beside the marker
+                type=const.GEOM_SPHERE,  # Geomety type
+                size=size,  # Size of the marker
+                rgba=(1, 1, 0, 1),
+            )  # RGBA of the marker
+            viewer.render()
+            step += 1
+            if step == blended_num_frames:
+                step = 0
 
 
 if __name__ == "__main__":

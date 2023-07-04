@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 import torch
 
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 from stable_baselines3.ppo.policies import MlpPolicy
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 from stable_baselines3.common.utils import (
     set_random_seed,
     get_device,
@@ -25,6 +25,11 @@ from khr_sim import KHRMimicEnv
 def parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
+    parser.add_argument("--debug", action="store_true", help="print debug info")
+    parser.add_argument("--et", action="store_true", help="early termination")
+    parser.add_argument(
+        "--control_type", type=str, default="torque", help="control type [torque, pd]"
+    )
     parser.add_argument(
         "--what",
         type=str,
@@ -71,9 +76,6 @@ def parser():
     )
     parser.add_argument("--resume", action="store_true", help="resume the training")
     parser.add_argument(
-        "--ros", action="store_true", help="publish some info using ros when testing"
-    )
-    parser.add_argument(
         "--best_rate",
         type=float,
         default=0.0,
@@ -82,9 +84,9 @@ def parser():
     return parser
 
 
-def make_env(seed, max_step, rank=0):
-    def _init(test=False, ros=False):
-        env = Monitor(KHRMimicEnv(test, max_step))
+def make_env(seed, max_step, early_termination, control_type, rank=0):
+    def _init(test=False):
+        env = Monitor(KHRMimicEnv(test, max_step, early_termination, control_type))
         env.seed(seed + rank)
         return env
 
@@ -98,20 +100,27 @@ def main():
     if args.what == "train":
         env = SubprocVecEnv(
             [
-                make_env(args.seed, int(args.max_step / args.n_env), i)
+                make_env(
+                    args.seed,
+                    int(args.max_step / args.n_env),
+                    args.et,
+                    args.control_type,
+                    i,
+                )
                 for i in range(args.n_env)
             ]
         )
+        # env = VecNormalize(env, norm_obs=True, norm_reward=False, training=True)
     else:
-        env = make_env(args.seed, None)(test=True, ros=args.ros)
+        env = make_env(args.seed, None, args.et, args.control_type)(test=True)
 
     root_dir = os.path.dirname(os.path.abspath(__file__))
     model = PPO(
         "MlpPolicy",
         env,
         policy_kwargs=dict(
-            activation_fn=torch.nn.Tanh,
-            net_arch=dict(pi=[256, 128], vf=[256, 128]),
+            activation_fn=torch.nn.ReLU,
+            net_arch=dict(pi=[512, 256], vf=[512, 256]),
             log_std_init=-0.5,
         ),
         n_steps=args.n_step,
@@ -148,8 +157,12 @@ def main():
                 print(sorted_rew_data)
                 load_iter = sorted_rew_data.tail(1).index[0]
                 load_step = sorted_rew_data.loc[load_iter, "step"]
+                print("load step", load_step)
+            # weight = root_dir + "/../saved/Policy_{0}/model_{1}_steps".format(
+            #     args.trial, load_step
+            # )
             weight = root_dir + "/../saved/Policy_{0}/model_{1}_steps".format(
-                args.trial, load_step
+                args.trial, load_iter
             )
             print("load: {}".format(weight))
             model = model.load(weight, print_system_info=True)
@@ -171,6 +184,16 @@ def main():
             action, _states = model.predict(obs, deterministic=True)
             obs, reward, done, info = env.step(action)
             step += 1
+
+            if args.debug and step % 5 == 0:
+                print("--------------------------------------")
+                print("step: {}".format(step))
+                print("obs: {}".format(obs))
+                print("action: {}".format(action))
+                print("reward: {}".format(reward))
+                print("info: {}".format(info))
+                print("--------------------------------------")
+
             if args.render:
                 env.render()
             if done:

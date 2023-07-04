@@ -137,7 +137,7 @@
     <motor name="larm_joint0" joint="larm_joint0"/>
     <motor name="larm_joint1" joint="larm_joint1"/>
     <motor name="larm_joint2" joint="larm_joint2"/>
-    <motor name="head_joint0" joint="head_joint0"/>
+    <!-- <motor name="head_joint0" joint="head_joint0"/> -->
 
     <!-- position control -->
   <!--   <position name="head_joint0" kp="10" joint="head_joint0" ctrlrange="-3.14159 3.14159"/> -->

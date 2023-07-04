@@ -119,14 +119,6 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         self.step_cnt = 0  # global
         self.frame_cnt = 0
         self.time = 0  # [s]
-        self.episode_reward = 0.0
-
-        self.episode_mimic_jnt_pos_reward = 0.0
-        self.episode_mimic_jnt_vel_reward = 0.0
-        self.episode_mimic_ee_pos_reward = 0.0
-        self.episode_mimic_base_pos_reward = 0.0
-        self.episode_mimic_base_quat_reward = 0.0
-        self.episode_mimic_base_lin_vel_reward = 0.0
 
         self.init_motion_data_frame = 0
 
@@ -237,28 +229,35 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         )  # NOTE local
 
         # mimic reward
-        mimic_jnt_pos_reward = 0.65 * np.exp(
-            # -2.0
-            # -0.1
-            -0.5  # TODO Optimize this
+        mimic_jnt_pos_weight = np.ones(self.n_control_joints, dtype=np.float32)
+        mimic_jnt_vel_weight = np.ones(self.n_control_joints, dtype=np.float32)
+        mimic_jnt_pos_reward = 0.5 * np.exp(
+            -2.0
             * (
                 np.linalg.norm(
-                    ref_jnt_pos - self.sim.data.qpos.flat[7 : 7 + self.n_control_joints]
+                    mimic_jnt_pos_weight
+                    * (
+                        ref_jnt_pos
+                        - self.sim.data.qpos.flat[7 : 7 + self.n_control_joints]
+                    )
                 )
                 ** 2
             )
         )  # NOTE hyperparameter from original paper
         mimic_jnt_vel_reward = 0.1 * np.exp(
-            # -0.1
-            -0.01
+            -0.1
             * (
                 np.linalg.norm(
-                    ref_jnt_vel - self.sim.data.qvel.flat[6 : 6 + self.n_control_joints]
+                    mimic_jnt_vel_weight
+                    * (
+                        ref_jnt_vel
+                        - self.sim.data.qvel.flat[6 : 6 + self.n_control_joints]
+                    )
                 )
                 ** 2
             )
         )  # NOTE hyperparameter from original paper
-        mimic_ee_pos_reward = 0.15 * np.exp(
+        mimic_ee_pos_reward = 0.1 * np.exp(
             -40.0 * (np.linalg.norm(ref_ee_pos - current_ee_pos) ** 2)
         )  # NOTE hyperparameter from original paper
         mimic_base_pos_reward = 0.1 * np.exp(
@@ -267,36 +266,35 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         mimic_base_quat_reward = 0.1 * np.exp(
             -50.0 * (1 - np.dot(self.sim.data.qpos.flat[3:7], ref_base_quat))
         )  # NOTE not from original paper
-        mimic_base_lin_vel_reward = 0.1 * np.exp(
+        mimic_base_lin_vel_reward = 0.2 * np.exp(
             -5.0
             * (np.linalg.norm(self.sim.data.qvel.flat[0:3] - ref_base_lin_vel) ** 2)
         )  # NOTE not from original paper
 
         # print(
         #     "local time step : {}, loop count : {}, cycle time step : {}".format(
-        #         self.local_frame_cnt, self.loop_cnt, self.cycle_frame_cnt
+        #         local_time_step, loop_cnt, cycle_frame_cnt
         #     )
         # )
+        # print("target_base_pos : {}".format(target_base_pos))
 
         mimic_reward = (
             mimic_jnt_pos_reward
             + mimic_jnt_vel_reward
             + mimic_ee_pos_reward
             + mimic_base_pos_reward
-            # + mimic_base_quat_reward
+            + mimic_base_quat_reward
             + mimic_base_lin_vel_reward
         )
+
+        # task_reward = np.exp(-2.5*(np.linalg.norm(self.sim.data.qpos.flat[0:3] - ref_base_pos) ** 2))
         task_reward = 0.0
+        # task_reward = np.exp(-1.0 * (np.linalg.norm(action - 1.0) ** 2)) # NOTE just for test
+
         reward = mimic_reward + task_reward
 
-        # if self.loop_cnt > 0 and (
-        #     (self.sim.data.qpos[0] - self.ref_base_pos[self.init_motion_data_frame, 0])
-        #     < 0.2
-        # ):
-        #     reward += 5.0
-
         # do simulation
-        self.torque_max = 2.5
+        self.torque_max = 10.0
         self.kp = 10.0
 
         if self.control_type == "pd":
@@ -336,9 +334,13 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             self.terminal_contact |= self.floor_contact_check(geom_id)
             break
 
-        if (self.frame_cnt > self.motion_cycle_frames) and (
-            (self.sim.data.qpos[0] - self.ref_base_pos[self.init_motion_data_frame, 0])
-            < 0.2
+        if (
+            self.loop_cnt > 0
+            and (
+                self.sim.data.qpos[0]
+                - self.ref_base_pos[self.init_motion_data_frame, 0]
+            )
+            < 0.1
         ):
             not_forward = True
         else:
@@ -347,7 +349,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         # done definition
         done = self.episode_cnt >= self.max_episode  # max episode
         if self.early_termination:
-            done |= self.sim.data.qpos[2] < 0.2  # fallen
+            done |= self.sim.data.qpos[2] < 0.15  # fallen
             done |= self.terminal_contact  # contact with ground other than feet
             done |= not_forward  # not forward
 
@@ -356,53 +358,10 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         obs = self._get_obs()
 
         # return step results
-        self.episode_reward += reward
-
-        self.episode_mimic_jnt_pos_reward += mimic_jnt_pos_reward
-        self.episode_mimic_jnt_vel_reward += mimic_jnt_vel_reward
-        self.episode_mimic_ee_pos_reward += mimic_ee_pos_reward
-        self.episode_mimic_base_pos_reward += mimic_base_pos_reward
-        self.episode_mimic_base_quat_reward += mimic_base_quat_reward
-        self.episode_mimic_base_lin_vel_reward += mimic_base_lin_vel_reward
-
         if done:
             self.episode_cnt = 0
             self.buffer = None
             reward = 0.0
-            print("-----------------------------")
-            print("episode length : {}".format(self.frame_cnt))
-            print("episode reward : {:.3f}".format(self.episode_reward))
-            print(
-                "mimic_jnt_pos_reward : {:.3f}".format(
-                    self.episode_mimic_jnt_pos_reward / self.episode_reward
-                )
-            )
-            print(
-                "mimic_jnt_vel_reward : {:.3f}".format(
-                    self.episode_mimic_jnt_vel_reward / self.episode_reward
-                )
-            )
-            print(
-                "mimic_ee_pos_reward : {:.3f}".format(
-                    self.episode_mimic_ee_pos_reward / self.episode_reward
-                )
-            )
-            print(
-                "mimic_base_pos_reward : {:.3f}".format(
-                    self.episode_mimic_base_pos_reward / self.episode_reward
-                )
-            )
-            print(
-                "mimic_base_quat_reward : {:.3f}".format(
-                    self.episode_mimic_base_quat_reward / self.episode_reward
-                )
-            )
-            print(
-                "mimic_base_lin_vel_reward : {:.3f}".format(
-                    self.episode_mimic_base_lin_vel_reward / self.episode_reward
-                )
-            )
-            print("-----------------------------")
         return (
             obs,
             reward,
@@ -414,7 +373,6 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
                 mimic_base_quat_reward=mimic_base_quat_reward,
                 mimic_base_lin_vel_reward=mimic_base_lin_vel_reward,
                 mimic_ee_pos_reward=mimic_ee_pos_reward,
-                episode_reward=self.episode_reward,
             ),
         )
 
@@ -438,36 +396,27 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
     def reset_model(self):
         self.time = 0.0
         self.frame_cnt = 0
-        self.episode_reward = 0.0
-
-        self.episode_mimic_jnt_pos_reward = 0.0
-        self.episode_mimic_jnt_vel_reward = 0.0
-        self.episode_mimic_ee_pos_reward = 0.0
-        self.episode_mimic_base_pos_reward = 0.0
-        self.episode_mimic_base_quat_reward = 0.0
-        self.episode_mimic_base_lin_vel_reward = 0.0
-
         self.init_motion_data_frame = np.random.randint(
             low=0, high=self.motion_cycle_frames
         )
         qpos = self.init_qpos  # base_pos [3], base_quat [4], jnt_pos [17]
         qvel = self.init_qvel
-        qpos[0:3] = self.ref_base_pos[self.init_motion_data_frame, :]  # base_pos [3]
-        qpos[3:7] = self.ref_base_quat[self.init_motion_data_frame, :]  # base_quat [4]
-        qpos[7 : 7 + self.n_control_joints] = self.ref_jnt_pos[
-            self.init_motion_data_frame, :
-        ]  # jnt_pos without head jouint [16]
-        qpos[-1] = 0.0  # for head joint [1]
-        qvel[0:3] = self.ref_base_lin_vel[
-            self.init_motion_data_frame, :
-        ]  # base_lin_vel [3]
-        qvel[3:6] = self.ref_base_ang_vel[
-            self.init_motion_data_frame, :
-        ]  # base_ang_vel [3]
-        qvel[6 : 6 + self.n_control_joints] = self.ref_jnt_vel[
-            self.init_motion_data_frame, :
-        ]  # jnt_vel without head joint [16]
-        qvel[-1] = 0.0  # for head joint [1]
+        # qpos[0:3] = self.ref_base_pos[self.init_motion_data_frame, :]  # base_pos [3]
+        # qpos[3:7] = self.ref_base_quat[self.init_motion_data_frame, :]  # base_quat [4]
+        # qpos[7 : 7 + self.n_control_joints] = self.ref_jnt_pos[
+        #     self.init_motion_data_frame, :
+        # ]  # jnt_pos without head jouint [16]
+        # qpos[-1] = 0.0  # for head joint [1]
+        # qvel[0:3] = self.ref_base_lin_vel[
+        #     self.init_motion_data_frame, :
+        # ]  # base_lin_vel [3]
+        # qvel[3:6] = self.ref_base_ang_vel[
+        #     self.init_motion_data_frame, :
+        # ]  # base_ang_vel [3]
+        # qvel[6 : 6 + self.n_control_joints] = self.ref_jnt_vel[
+        #     self.init_motion_data_frame, :
+        # ]  # jnt_vel without head joint [16]
+        # qvel[-1] = 0.0  # for head joint [1]
 
         self.set_state(qpos, qvel)
         self.set_buffer()
@@ -476,56 +425,56 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
     def viewer_setup(self):
         self.viewer.cam.distance = self.model.stat.extent * 1.0
 
-    def render(self, *args, **kwargs):
-        if self.viewer:
-            size = [0.015] * 3
+    # def render(self, *args, **kwargs):
+    #     if self.viewer:
+    #         size = [0.015] * 3
 
-            ref_base_pos = self.ref_base_pos[
-                self.cycle_frame_cnt
-            ] + self.loop_cnt * np.array([self.ref_base_pos[-1, 0], 0.0, 0.0])
+    #         ref_base_pos = self.ref_base_pos[
+    #             self.cycle_frame_cnt
+    #         ] + self.loop_cnt * np.array([self.ref_base_pos[-1, 0], 0.0, 0.0])
 
-            self.viewer.add_marker(
-                pos=ref_base_pos,  # Position
-                label="base pos ref",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(1, 0, 1, 1),  # RGBA of the marker
-            )  # RGBA of the marker
+    #         self.viewer.add_marker(
+    #             pos=ref_base_pos,  # Position
+    #             label="base pos ref",  # Text beside the marker
+    #             type=const.GEOM_SPHERE,  # Geomety type
+    #             size=size,  # Size of the marker
+    #             rgba=(1, 0, 1, 1),  # RGBA of the marker
+    #         )  # RGBA of the marker
 
-            self.viewer.add_marker(
-                pos=self.ref_ee_pos[self.cycle_frame_cnt, 0:3]
-                + ref_base_pos,  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(1, 0, 0, 1),  # Red
-            )  # RGBA of the marker
-            self.viewer.add_marker(
-                pos=self.ref_ee_pos[self.cycle_frame_cnt, 3:6]
-                + ref_base_pos,  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(0, 1, 0, 1),  # Green
-            )  # RGBA of the marker
-            self.viewer.add_marker(
-                pos=self.ref_ee_pos[self.cycle_frame_cnt, 6:9]
-                + ref_base_pos,  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(0, 0, 1, 1),  # Blue
-            )  # RGBA of the marker
-            self.viewer.add_marker(
-                pos=self.ref_ee_pos[self.cycle_frame_cnt, 9:12]
-                + ref_base_pos,  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(1, 1, 0, 1),  # Yellow
-            )  # RGBA of the marker
+    #         self.viewer.add_marker(
+    #             pos=self.ref_ee_pos[self.cycle_frame_cnt, 0:3]
+    #             + ref_base_pos,  # Position
+    #             label=" ",  # Text beside the marker
+    #             type=const.GEOM_SPHERE,  # Geomety type
+    #             size=size,  # Size of the marker
+    #             rgba=(1, 0, 0, 1),  # Red
+    #         )  # RGBA of the marker
+    #         self.viewer.add_marker(
+    #             pos=self.ref_ee_pos[self.cycle_frame_cnt, 3:6]
+    #             + ref_base_pos,  # Position
+    #             label=" ",  # Text beside the marker
+    #             type=const.GEOM_SPHERE,  # Geomety type
+    #             size=size,  # Size of the marker
+    #             rgba=(0, 1, 0, 1),  # Green
+    #         )  # RGBA of the marker
+    #         self.viewer.add_marker(
+    #             pos=self.ref_ee_pos[self.cycle_frame_cnt, 6:9]
+    #             + ref_base_pos,  # Position
+    #             label=" ",  # Text beside the marker
+    #             type=const.GEOM_SPHERE,  # Geomety type
+    #             size=size,  # Size of the marker
+    #             rgba=(0, 0, 1, 1),  # Blue
+    #         )  # RGBA of the marker
+    #         self.viewer.add_marker(
+    #             pos=self.ref_ee_pos[self.cycle_frame_cnt, 9:12]
+    #             + ref_base_pos,  # Position
+    #             label=" ",  # Text beside the marker
+    #             type=const.GEOM_SPHERE,  # Geomety type
+    #             size=size,  # Size of the marker
+    #             rgba=(1, 1, 0, 1),  # Yellow
+    #         )  # RGBA of the marker
 
-        super(KHRMimicEnv, self).render(*args, **kwargs)
+    #     super(KHRMimicEnv, self).render(*args, **kwargs)
 
 
 if __name__ == "__main__":
@@ -534,6 +483,7 @@ if __name__ == "__main__":
 
     for i in range(10000):
         test_action = np.random.uniform(-1.0, 1.0, 16)
+        test_action = np.zeros(16)
         obs, reward, done, info = env.step(test_action)
         if done:
             env.reset()

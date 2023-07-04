@@ -38,7 +38,7 @@ def main():
     ref_rleg_jnt_pos = ref_jnt_pos[:, 11:16]
 
     # TODO
-    ref_base_pos[:, 0] = 0.8 * ref_base_pos[:, 0]
+    # ref_base_pos[:, 0] = 0.8 * ref_base_pos[:, 0]
 
     # RLEG LLEG RARM LARM in mujoco
     ref_jnt_pos = np.hstack(
@@ -109,48 +109,6 @@ def main():
     ref_base_ang_vel = ref_base_ang_vel[CLIP:-CLIP, :]
     ref_jnt_vel = ref_jnt_vel[CLIP:-CLIP, :]
     num_frames -= CLIP * 2
-
-    # plt.figure()
-    # plt.title("ref_base_pos")
-    # plt.plot(ref_base_lin_vel[:, 0], label="x")
-    # plt.plot(ref_base_lin_vel[:, 1], label="y")
-    # plt.plot(ref_base_lin_vel[:, 2], label="z")
-    # plt.legend()
-
-    # plt.figure()
-    # plt.title("ref_base_ang_vel")
-    # plt.plot(ref_base_ang_vel[:, 0], label="x")
-    # plt.plot(ref_base_ang_vel[:, 1], label="y")
-    # plt.plot(ref_base_ang_vel[:, 2], label="z")
-    # plt.legend()
-
-    # plt.figure()
-    # plt.title("ref_jnt_pos")
-    # plt.plot(ref_jnt_vel[:, 0], label="rleg_0")
-    # plt.plot(ref_jnt_vel[:, 1], label="rleg_1")
-    # plt.plot(ref_jnt_vel[:, 2], label="rleg_2")
-    # plt.plot(ref_jnt_vel[:, 3], label="rleg_3")
-    # plt.plot(ref_jnt_vel[:, 4], label="rleg_4")
-    # plt.plot(ref_jnt_vel[:, 5], label="lleg_0")
-    # plt.plot(ref_jnt_vel[:, 6], label="lleg_1")
-    # plt.plot(ref_jnt_vel[:, 7], label="lleg_2")
-    # plt.plot(ref_jnt_vel[:, 8], label="lleg_3")
-    # plt.plot(ref_jnt_vel[:, 9], label="lleg_4")
-    # plt.plot(ref_jnt_vel[:, 10], label="rarm_0")
-    # plt.plot(ref_jnt_vel[:, 11], label="rarm_1")
-    # plt.plot(ref_jnt_vel[:, 12], label="rarm_2")
-    # plt.plot(ref_jnt_vel[:, 13], label="larm_0")
-    # plt.plot(ref_jnt_vel[:, 14], label="larm_1")
-    # plt.plot(ref_jnt_vel[:, 15], label="larm_2")
-    # plt.legend()
-
-    # plt.show()
-
-    # ref_ee_pos = dict()
-    # ref_ee_pos["larm"] = np.zeros((num_frames, 3), dtype=np.float32)
-    # ref_ee_pos["rarm"] = np.zeros((num_frames, 3), dtype=np.float32)
-    # ref_ee_pos["lleg"] = np.zeros((num_frames, 3), dtype=np.float32)
-    # ref_ee_pos["rleg"] = np.zeros((num_frames, 3), dtype=np.float32)
 
     ref_ee_pos = np.zeros((num_frames, 12), dtype=np.float32)
 
@@ -287,6 +245,14 @@ def main():
                 frame_idx0, :
             ] + blend * ref_ee_pos[frame_idx1, :]
 
+        # # NOTE
+        # blended_ref_jnt_pos[:, 0] = np.clip(
+        #     blended_ref_jnt_pos[:, 0], a_min=None, a_max=0.0
+        # )
+        # blended_ref_jnt_pos[:, 5] = np.clip(
+        #     blended_ref_jnt_pos[:, 5], a_min=0, a_max=None
+        # )
+
         np.savez(
             "blended_processed_07_08.npz",
             ref_base_pos=blended_ref_base_pos,
@@ -310,49 +276,66 @@ def main():
 
         plt.figure()
         plt.title("ref_base_pos")
-        plt.plot(time_seq, ref_base_lin_vel[:, 0], label="x")
-        plt.plot(time_seq, ref_base_lin_vel[:, 1], label="y")
-        plt.plot(time_seq, ref_base_lin_vel[:, 2], label="z")
-        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 0], label="blend_x")
-        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 1], label="blend_y")
-        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 2], label="blend_z")
+        # plt.plot(time_seq, ref_base_lin_vel[:, 0], label="x")
+        # plt.plot(time_seq, ref_base_lin_vel[:, 1], label="y")
+        # plt.plot(time_seq, ref_base_lin_vel[:, 2], label="z")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 0], label="x")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 1], label="y")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 2], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_pos[:, 0], label="x")
+        plt.plot(blended_time_seq, blended_ref_base_pos[:, 1], label="y")
+        plt.plot(blended_time_seq, blended_ref_base_pos[:, 2], label="z")
         plt.legend()
 
         plt.figure()
         plt.title("ref_base_quat")
-        plt.plot(time_seq, ref_base_quat[:, 0], label="w")
-        plt.plot(time_seq, ref_base_quat[:, 1], label="x")
-        plt.plot(time_seq, ref_base_quat[:, 2], label="y")
-        plt.plot(time_seq, ref_base_quat[:, 3], label="z")
-        plt.plot(blended_time_seq, blended_ref_base_quat[:, 0], label="blend_w")
-        plt.plot(blended_time_seq, blended_ref_base_quat[:, 1], label="blend_x")
-        plt.plot(blended_time_seq, blended_ref_base_quat[:, 2], label="blend_y")
-        plt.plot(blended_time_seq, blended_ref_base_quat[:, 3], label="blend_z")
+        # plt.plot(time_seq, ref_base_quat[:, 0], label="w")
+        # plt.plot(time_seq, ref_base_quat[:, 1], label="x")
+        # plt.plot(time_seq, ref_base_quat[:, 2], label="y")
+        # plt.plot(time_seq, ref_base_quat[:, 3], label="z")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 6], label="w")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 3], label="x")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 4], label="y")
+        # plt.plot(time_seq, retarget_frames[CLIP:-CLIP, 5], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 0], label="w")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 1], label="x")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 2], label="y")
+        plt.plot(blended_time_seq, blended_ref_base_quat[:, 3], label="z")
         plt.legend()
 
         plt.figure("ref_base_lin_vel")
         plt.title("ref_base_lin_vel")
-        plt.plot(time_seq, ref_base_lin_vel[:, 0], label="x")
-        plt.plot(time_seq, ref_base_lin_vel[:, 1], label="y")
-        plt.plot(time_seq, ref_base_lin_vel[:, 2], label="z")
-        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 0], label="blend_x")
-        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 1], label="blend_y")
-        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 2], label="blend_z")
+        # plt.plot(time_seq, ref_base_lin_vel[:, 0], label="x")
+        # plt.plot(time_seq, ref_base_lin_vel[:, 1], label="y")
+        # plt.plot(time_seq, ref_base_lin_vel[:, 2], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 0], label="x")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 1], label="y")
+        plt.plot(blended_time_seq, blended_ref_base_lin_vel[:, 2], label="z")
+        plt.legend()
 
         plt.figure()
         plt.title("ref_base_ang_vel")
-        plt.plot(time_seq, ref_base_ang_vel[:, 0], label="x")
-        plt.plot(time_seq, ref_base_ang_vel[:, 1], label="y")
-        plt.plot(time_seq, ref_base_ang_vel[:, 2], label="z")
-        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 0], label="blend_x")
-        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 1], label="blend_y")
-        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 2], label="blend_z")
+        # plt.plot(time_seq, ref_base_ang_vel[:, 0], label="x")
+        # plt.plot(time_seq, ref_base_ang_vel[:, 1], label="y")
+        # plt.plot(time_seq, ref_base_ang_vel[:, 2], label="z")
+        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 0], label="x")
+        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 1], label="y")
+        plt.plot(blended_time_seq, blended_ref_base_ang_vel[:, 2], label="z")
         plt.legend()
 
         plt.figure()
         plt.title("ref_jnt_pos")
-        plt.plot(time_seq, ref_jnt_vel[:, 0], label="rleg_0")
-        plt.plot(blended_time_seq, blended_ref_jnt_vel[:, 0], label="blend_rleg_0")
+        plt.plot(time_seq, ref_jnt_pos[:, 0], label="rleg-crotch-r")
+        plt.plot(time_seq, ref_jnt_pos[:, 1], label="rleg-crotch-p")
+        plt.plot(time_seq, ref_jnt_pos[:, 2], label="rleg-knee-p")
+        plt.plot(time_seq, ref_jnt_pos[:, 3], label="rleg-ankle-p")
+        plt.plot(time_seq, ref_jnt_pos[:, 4], label="rleg-ankle-r")
+        # plt.plot(blended_time_seq, blended_ref_jnt_pos[:, 0], label="blend_rleg_0")
+        # plt.plot(blended_time_seq, blended_ref_jnt_pos[:, 1], label="blend_rleg_1")
+        # plt.plot(blended_time_seq, blended_ref_jnt_pos[:, 2], label="blend_rleg_2")
+        # plt.plot(blended_time_seq, blended_ref_jnt_pos[:, 3], label="blend_rleg_3")
+        # plt.plot(blended_time_seq, blended_ref_jnt_pos[:, 4], label="blend_rleg_4")
+
         # plt.plot(ref_jnt_vel[:, 1], label="rleg_1")
         # plt.plot(ref_jnt_vel[:, 2], label="rleg_2")
         # plt.plot(ref_jnt_vel[:, 3], label="rleg_3")
@@ -368,7 +351,7 @@ def main():
         # plt.plot(ref_jnt_vel[:, 13], label="larm_0")
         # plt.plot(ref_jnt_vel[:, 14], label="larm_1")
         # plt.plot(ref_jnt_vel[:, 15], label="larm_2")
-        # plt.legend()
+        plt.legend()
 
         plt.show()
 
@@ -416,34 +399,34 @@ def main():
             sim.set_state(state)
             sim.forward()
             sim.step()
-            viewer.add_marker(
-                pos=blended_ref_ee_pos[step, 0:3] + sim.data.qpos[0:3],  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(1, 0, 0, 1),
-            )  # RGBA of the marker
-            viewer.add_marker(
-                pos=blended_ref_ee_pos[step, 3:6] + sim.data.qpos[0:3],  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(0, 1, 0, 1),
-            )  # RGBA of the marker
-            viewer.add_marker(
-                pos=blended_ref_ee_pos[step, 6:9] + sim.data.qpos[0:3],  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(0, 0, 1, 1),
-            )  # RGBA of the marker
-            viewer.add_marker(
-                pos=blended_ref_ee_pos[step, 9:12] + sim.data.qpos[0:3],  # Position
-                label=" ",  # Text beside the marker
-                type=const.GEOM_SPHERE,  # Geomety type
-                size=size,  # Size of the marker
-                rgba=(1, 1, 0, 1),
-            )  # RGBA of the marker
+            # viewer.add_marker(
+            #     pos=blended_ref_ee_pos[step, 0:3] + sim.data.qpos[0:3],  # Position
+            #     label=" ",  # Text beside the marker
+            #     type=const.GEOM_SPHERE,  # Geomety type
+            #     size=size,  # Size of the marker
+            #     rgba=(1, 0, 0, 1),
+            # )  # RGBA of the marker
+            # viewer.add_marker(
+            #     pos=blended_ref_ee_pos[step, 3:6] + sim.data.qpos[0:3],  # Position
+            #     label=" ",  # Text beside the marker
+            #     type=const.GEOM_SPHERE,  # Geomety type
+            #     size=size,  # Size of the marker
+            #     rgba=(0, 1, 0, 1),
+            # )  # RGBA of the marker
+            # viewer.add_marker(
+            #     pos=blended_ref_ee_pos[step, 6:9] + sim.data.qpos[0:3],  # Position
+            #     label=" ",  # Text beside the marker
+            #     type=const.GEOM_SPHERE,  # Geomety type
+            #     size=size,  # Size of the marker
+            #     rgba=(0, 0, 1, 1),
+            # )  # RGBA of the marker
+            # viewer.add_marker(
+            #     pos=blended_ref_ee_pos[step, 9:12] + sim.data.qpos[0:3],  # Position
+            #     label=" ",  # Text beside the marker
+            #     type=const.GEOM_SPHERE,  # Geomety type
+            #     size=size,  # Size of the marker
+            #     rgba=(1, 1, 0, 1),
+            # )  # RGBA of the marker
             viewer.render()
             step += 1
             if step == blended_num_frames:

@@ -240,7 +240,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         mimic_jnt_pos_reward = 0.65 * np.exp(
             # -2.0
             # -0.1
-            -0.5  # TODO Optimize this
+            -2.0  # TODO Optimize this
             * (
                 np.linalg.norm(
                     ref_jnt_pos - self.sim.data.qpos.flat[7 : 7 + self.n_control_joints]
@@ -250,7 +250,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         )  # NOTE hyperparameter from original paper
         mimic_jnt_vel_reward = 0.1 * np.exp(
             # -0.1
-            -0.01
+            -0.1
             * (
                 np.linalg.norm(
                     ref_jnt_vel - self.sim.data.qvel.flat[6 : 6 + self.n_control_joints]
@@ -268,7 +268,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             -50.0 * (1 - np.dot(self.sim.data.qpos.flat[3:7], ref_base_quat))
         )  # NOTE not from original paper
         mimic_base_lin_vel_reward = 0.1 * np.exp(
-            -5.0
+            -1.0
             * (np.linalg.norm(self.sim.data.qvel.flat[0:3] - ref_base_lin_vel) ** 2)
         )  # NOTE not from original paper
 
@@ -336,11 +336,23 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             self.terminal_contact |= self.floor_contact_check(geom_id)
             break
 
-        if (self.frame_cnt > self.motion_cycle_frames) and (
+        # if (self.frame_cnt > self.motion_cycle_frames) and (
+        #     (self.sim.data.qpos[0] - self.ref_base_pos[self.init_motion_data_frame, 0])
+        #     < 0.18
+        # ):
+        #     not_forward = True
+        #     # TODO
+        #     reward -= 10.0
+        # else:
+        #     not_forward = False
+
+        if (self.frame_cnt > self.motion_cycle_frames * (self.loop_cnt + 1)) and (
             (self.sim.data.qpos[0] - self.ref_base_pos[self.init_motion_data_frame, 0])
-            < 0.2
+            < (0.18 * (self.loop_cnt + 1))
         ):
             not_forward = True
+            # TODO
+            reward -= 10.0
         else:
             not_forward = False
 

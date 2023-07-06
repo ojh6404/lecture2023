@@ -1,7 +1,7 @@
 # KHR Deep Mimic 
 
 Project for KHR robot locomotion with Deep Mimic.
-![](https://github.com/ojh6404/lecture2023/asset/khr_mimic.gif)
+![](asset/khr_mimic.gif)
 ## Prepare
 Tested on Ubuntu 20.04 (probably no problem with 18.04 and MacOS cause they support mujoco and mujoco-py).
 

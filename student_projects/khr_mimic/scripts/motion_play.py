@@ -38,7 +38,7 @@ def main():
     ref_rleg_jnt_pos = ref_jnt_pos[:, 11:16]
 
     # TODO
-    ref_base_pos[:, 0] = 0.7 * ref_base_pos[:, 0]
+    ref_base_pos[:, 0] = 1.0 * ref_base_pos[:, 0]
 
     # RLEG LLEG RARM LARM in mujoco
     ref_jnt_pos = np.hstack(

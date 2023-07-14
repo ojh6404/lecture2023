@@ -158,14 +158,14 @@ def main():
                 load_iter = sorted_rew_data.tail(1).index[0]
                 load_step = sorted_rew_data.loc[load_iter, "step"]
                 print("load step", load_step)
-            # weight = root_dir + "/../saved/Policy_{0}/model_{1}_steps".format(
-            #     args.trial, load_step
-            # )
             weight = root_dir + "/../saved/Policy_{0}/model_{1}_steps".format(
-                args.trial, load_iter
+                args.trial, load_step
             )
+            # weight = root_dir + "/../saved/Policy_{0}/model_{1}_steps".format(
+            #     args.trial, load_iter
+            # )
             print("load: {}".format(weight))
-            model = model.load(weight, print_system_info=True)
+            model = model.load(weight, env=env, print_system_info=True)
 
     if args.what == "train":
         trial = get_latest_run_id(root_dir + "/../saved", "PPO") + 1

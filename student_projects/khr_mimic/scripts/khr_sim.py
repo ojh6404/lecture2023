@@ -250,7 +250,7 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         )  # NOTE hyperparameter from original paper
         mimic_jnt_vel_reward = 0.1 * np.exp(
             # -0.1
-            -0.1
+            -0.05
             * (
                 np.linalg.norm(
                     ref_jnt_vel - self.sim.data.qvel.flat[6 : 6 + self.n_control_joints]
@@ -346,9 +346,20 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         # else:
         #     not_forward = False
 
-        if (self.frame_cnt > self.motion_cycle_frames * (self.loop_cnt + 1)) and (
+        # 61, 62, 63
+        # if self.loop_cnt and (
+        #     (self.sim.data.qpos[0] - self.ref_base_pos[self.init_motion_data_frame, 0])
+        #     < 0.18 * self.loop_cnt
+        # ):
+        #     not_forward = True
+        #     # TODO
+        #     reward -= 10.0
+        # else:
+        #     not_forward = False
+
+        if (self.frame_cnt // self.motion_cycle_frames) and (
             (self.sim.data.qpos[0] - self.ref_base_pos[self.init_motion_data_frame, 0])
-            < (0.18 * (self.loop_cnt + 1))
+            < 0.18 * (self.frame_cnt // self.motion_cycle_frames)
         ):
             not_forward = True
             # TODO
@@ -487,6 +498,12 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
 
     def viewer_setup(self):
         self.viewer.cam.distance = self.model.stat.extent * 1.0
+        # self.viewer.cam.trackbodyid = 3
+        # self.viewer.cam.distance = self.model.stat.extent * 0.5
+        # self.viewer.cam.lookat[0] += 0.5
+        # self.viewer.cam.lookat[1] -= 0.5
+        # self.viewer.cam.lookat[2] -= 0.5
+        # self.viewer.cam.elevation = -20
 
     def render(self, *args, **kwargs):
         if self.viewer:

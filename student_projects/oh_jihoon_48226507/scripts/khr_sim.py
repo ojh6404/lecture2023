@@ -392,40 +392,40 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
             self.episode_cnt = 0
             self.buffer = None
             reward = 0.0
-            # print("-----------------------------")
-            # print("episode length : {}".format(self.frame_cnt))
-            # print("episode reward : {:.3f}".format(self.episode_reward))
-            # print(
-            #     "mimic_jnt_pos_reward : {:.3f}".format(
-            #         self.episode_mimic_jnt_pos_reward / self.episode_reward
-            #     )
-            # )
-            # print(
-            #     "mimic_jnt_vel_reward : {:.3f}".format(
-            #         self.episode_mimic_jnt_vel_reward / self.episode_reward
-            #     )
-            # )
-            # print(
-            #     "mimic_ee_pos_reward : {:.3f}".format(
-            #         self.episode_mimic_ee_pos_reward / self.episode_reward
-            #     )
-            # )
-            # print(
-            #     "mimic_base_pos_reward : {:.3f}".format(
-            #         self.episode_mimic_base_pos_reward / self.episode_reward
-            #     )
-            # )
-            # print(
-            #     "mimic_base_quat_reward : {:.3f}".format(
-            #         self.episode_mimic_base_quat_reward / self.episode_reward
-            #     )
-            # )
-            # print(
-            #     "mimic_base_lin_vel_reward : {:.3f}".format(
-            #         self.episode_mimic_base_lin_vel_reward / self.episode_reward
-            #     )
-            # )
-            # print("-----------------------------")
+            print("-----------------------------")
+            print("episode length : {}".format(self.frame_cnt))
+            print("episode reward : {:.3f}".format(self.episode_reward))
+            print(
+                "mimic_jnt_pos_reward : {:.3f}".format(
+                    self.episode_mimic_jnt_pos_reward / self.episode_reward
+                )
+            )
+            print(
+                "mimic_jnt_vel_reward : {:.3f}".format(
+                    self.episode_mimic_jnt_vel_reward / self.episode_reward
+                )
+            )
+            print(
+                "mimic_ee_pos_reward : {:.3f}".format(
+                    self.episode_mimic_ee_pos_reward / self.episode_reward
+                )
+            )
+            print(
+                "mimic_base_pos_reward : {:.3f}".format(
+                    self.episode_mimic_base_pos_reward / self.episode_reward
+                )
+            )
+            print(
+                "mimic_base_quat_reward : {:.3f}".format(
+                    self.episode_mimic_base_quat_reward / self.episode_reward
+                )
+            )
+            print(
+                "mimic_base_lin_vel_reward : {:.3f}".format(
+                    self.episode_mimic_base_lin_vel_reward / self.episode_reward
+                )
+            )
+            print("-----------------------------")
         return (
             obs,
             reward,
@@ -497,13 +497,13 @@ class KHRMimicEnv(MujocoEnv, utils.EzPickle):
         return self._get_obs()
 
     def viewer_setup(self):
-        # self.viewer.cam.distance = self.model.stat.extent * 1.0
-        self.viewer.cam.trackbodyid = 3
-        self.viewer.cam.distance = self.model.stat.extent * 0.5
-        self.viewer.cam.lookat[0] += 0.5
-        self.viewer.cam.lookat[1] -= 0.5
-        self.viewer.cam.lookat[2] -= 0.5
-        self.viewer.cam.elevation = -20
+        self.viewer.cam.distance = self.model.stat.extent * 1.0
+        # self.viewer.cam.trackbodyid = 3
+        # self.viewer.cam.distance = self.model.stat.extent * 0.5
+        # self.viewer.cam.lookat[0] += 0.5
+        # self.viewer.cam.lookat[1] -= 0.5
+        # self.viewer.cam.lookat[2] -= 0.5
+        # self.viewer.cam.elevation = -20
 
     def render(self, *args, **kwargs):
         if self.viewer:

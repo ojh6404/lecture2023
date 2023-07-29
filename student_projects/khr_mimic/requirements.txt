@@ -1,6 +1,7 @@
 tensorboard
 pyglet
 gym==0.21.0
+cython<3
 mujoco-py
 numpy
 cvxopt
